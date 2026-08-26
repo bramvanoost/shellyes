@@ -382,6 +382,28 @@ struct GameView: View {
         }
     }
 
+    #if DEBUG
+    /// Applies the launch-argument seed requested by `ScreenshotTests`.
+    /// Runs after the intro animation so the captures show a settled
+    /// board rather than one still sliding into place.
+    private func applyScreenshotSeed() async {
+        guard let seed = ScreenshotMode.seed else { return }
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        store.debugSeedAIVaults()
+        switch seed {
+        case .vaults:
+            break
+        case .steal:
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            stealArrivalSeat = GameStore.humanSeat
+            store.debugTriggerSteal()
+        case .tally:
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            store.debugForceGameOver()
+        }
+    }
+    #endif
+
     private func runIntroAnimation() async {
         let reduce = settings.reducedMotion || iosReduceMotion
         if reduce {
@@ -675,6 +697,9 @@ struct GameView: View {
             .task {
                 if gameStartTime == nil { gameStartTime = Date() }
                 await runIntroAnimation()
+                #if DEBUG
+                await applyScreenshotSeed()
+                #endif
             }
             .onChange(of: store.state.players.map { $0.tiles.count }) { oldCounts, newCounts in
                 detectSteal(oldCounts: oldCounts, newCounts: newCounts)
@@ -835,6 +860,7 @@ struct ChromeBar: View {
             Spacer()
 
             #if DEBUG
+            if !ScreenshotMode.isActive {
             Menu {
                 if let onDebugSeedAI {
                     Button("Seed AI vaults (+2 each)", systemImage: "shell.fill", action: onDebugSeedAI)
@@ -855,6 +881,7 @@ struct ChromeBar: View {
                     .padding(8)
             }
             .accessibilityLabel("Debug menu")
+            }
             #endif
 
             NavigationLink(value: Route.settings) {
