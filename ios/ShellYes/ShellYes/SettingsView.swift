@@ -335,32 +335,65 @@ private struct SettingsRow<Trailing: View>: View {
 private struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
 
+    private var signOffAttributed: AttributedString {
+        let raw = "Made with sea noises in Ghent, Belgium by [@ort](https://instagram.com/ort)"
+        return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
+    }
+
     var body: some View {
         ZStack {
             Background()
-            VStack(spacing: 20) {
-                Spacer()
-                HStack(spacing: 0) {
-                    Text("c")
-                    Text("h").foregroundStyle(Color.coral).font(.avenir(56, weight: .demiBold))
-                    Text("ing")
-                }
-                .font(.avenir(56, weight: .ultraLight))
-                .tracking(4)
-                .foregroundStyle(Color.ink)
+            ScrollView {
+                VStack(spacing: 22) {
+                    ShellMedallion(size: 96)
+                        .shadow(color: Color.gold.opacity(0.45), radius: 18, x: 0, y: 0)
+                        .shadow(color: Color.treasureInk.opacity(0.22), radius: 0, x: 0, y: 5)
+                        .padding(.top, 36)
 
-                Text("A push-your-luck dice game.\nv\(AppVersion.short) — Shell Yes by Fastronaut.")
-                    .font(.avenir(15, weight: .medium, italic: true))
+                    Text("Shell Yes")
+                        .font(.custom("Optima", size: 44).weight(.semibold))
+                        .tracking(1)
+                        .foregroundStyle(Color.ink)
+
+                    VStack(spacing: 14) {
+                        Text("A beachy slow soft thinky game to combat my own doom scrolling.")
+
+                        Text("Roll some dice, think just a little bit, pick up a shell, count some pearls. Sometimes the tide gives, sometimes you see a shell disappear in the swell.")
+
+                        Text("If you have any thoughts or suggestions, I'd love to hear them.")
+                    }
+                    .font(.avenir(15, weight: .medium))
+                    .foregroundStyle(Color.ink.opacity(0.82))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.dimInk)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 10)
 
-                Spacer()
+                    WaveLine(wavelength: 10, amplitude: 2)
+                        .stroke(Color.ink.opacity(0.45), lineWidth: 1.4)
+                        .frame(width: 140, height: 8)
+                        .padding(.top, 14)
 
-                Button("Close") { dismiss() }
-                    .stampButton()
-                    .frame(maxWidth: 240)
+                    Text(signOffAttributed)
+                        .font(.avenir(12, weight: .medium, italic: true))
+                        .tracking(0.5)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.ink.opacity(0.55))
+                        .tint(Color.coral)
+                        .padding(.top, 2)
+
+                    Text("v\(AppVersion.short)")
+                        .font(.avenir(11, weight: .medium, italic: true))
+                        .tracking(1)
+                        .foregroundStyle(Color.ink.opacity(0.4))
+
+                    Button("Close") { dismiss() }
+                        .stampButton()
+                        .frame(maxWidth: 240)
+                        .padding(.top, 8)
+                        .padding(.bottom, 40)
+                }
+                .padding(.horizontal, 32)
             }
-            .padding(40)
         }
     }
 }

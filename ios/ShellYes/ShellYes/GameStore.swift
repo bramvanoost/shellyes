@@ -283,6 +283,10 @@ final class GameStore {
     func newGame() {
         rng = Mulberry32(seed: UInt32.random(in: 1...UInt32.max))
         state = initialState(playerIds: Self.freshPlayerIds())
+        aiEvent = nil
+        let cont = aiEventContinuation
+        aiEventContinuation = nil
+        cont?.resume()
     }
 
     #if DEBUG

@@ -29,7 +29,6 @@ struct ShellYesApp: App {
                         case .game:
                             GameView(store: store, settings: settings, stats: stats)
                                 .onAppear {
-                                    store.newGame()
                                     AudioPolicy.shared.setInGame(true)
                                 }
                                 .onDisappear {
