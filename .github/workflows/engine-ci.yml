@@ -6,7 +6,7 @@ on:
       - 'src/engine.ts'
       - 'src/ai.ts'
       - 'sim/**'
-      - 'ios/CHINGEngine/**'
+      - 'ios/ShellYesEngine/**'
       - 'parity/**'
       - 'package.json'
       - 'package-lock.json'
@@ -32,15 +32,15 @@ jobs:
         run: npm ci
 
       - name: Run Swift engine tests
-        working-directory: ios/CHINGEngine
+        working-directory: ios/ShellYesEngine
         run: swift test
 
       - name: Run TS engine tests
         run: npm test
 
       - name: Build parity CLI
-        working-directory: ios/CHINGEngine
-        run: swift build --product ching-parity
+        working-directory: ios/ShellYesEngine
+        run: swift build --product shellyes-parity
 
       - name: Run parity diff
         run: node parity/diff.mjs

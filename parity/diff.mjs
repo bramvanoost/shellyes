@@ -12,7 +12,7 @@ const cases = JSON.parse(readFileSync(join(__dirname, 'cases.json'), 'utf8'));
 
 const swiftCli = join(
   repoRoot,
-  'ios/CHINGEngine/.build/debug/ching-parity'
+  'ios/ShellYesEngine/.build/debug/shellyes-parity'
 );
 
 function runTs(c) {
