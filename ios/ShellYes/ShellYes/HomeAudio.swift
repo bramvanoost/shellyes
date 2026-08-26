@@ -23,9 +23,10 @@ final class HomeAudio {
         let url = Bundle.main.url(forResource: resourceName, withExtension: "mp3")
               ?? Bundle.main.url(forResource: resourceName, withExtension: "m4a")
         guard let url else { return }
+        // Session category/activation lives in AudioPolicy.configureSession(),
+        // called once at launch. Don't set it here: SFX need the same
+        // session even when the home music never starts.
         do {
-            try AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-            try AVAudioSession.sharedInstance().setActive(true)
             let p = try AVAudioPlayer(contentsOf: url)
             p.numberOfLoops = -1
             p.volume = 0.55

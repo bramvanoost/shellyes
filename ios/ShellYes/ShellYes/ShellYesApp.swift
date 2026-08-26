@@ -14,6 +14,9 @@ struct ShellYesApp: App {
         _settings = .init(initialValue: s)
         _store = .init(initialValue: GameStore(settings: s))
         _stats = .init(initialValue: StatsStore())
+        // Before any player exists, so SFX and music share one
+        // `.playback` session that ignores the ringer switch.
+        AudioPolicy.shared.configureSession()
         // Self-hosted Aptabase at aptabase.fastronaut.com. App key
         // is a public identifier (like a Stripe publishable key);
         // safe to ship in the binary.
@@ -77,6 +80,10 @@ struct ShellYesApp: App {
                         return
                     }
                     sessionStart = now
+                    // Interruptions (calls, Siri) and backgrounding can
+                    // leave our session deactivated; re-assert it so
+                    // volume buttons keep driving media volume.
+                    AudioPolicy.shared.configureSession()
                     Telemetry.shared.track("app_opened")
                 case .background:
                     let seconds = sessionStart.map { Int(Date().timeIntervalSince($0)) } ?? 0
