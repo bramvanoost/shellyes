@@ -709,7 +709,13 @@ struct GameView: View {
                 gameEndedReported = true
                 let scores = store.scores
                 let humanScore = scores[GameStore.humanSeat]
-                let humanWon = humanScore == (scores.max() ?? 0)
+                let topScore = scores.max() ?? 0
+                let leaderCount = scores.filter { $0 == topScore }.count
+                // A tie still counts as "won" for streaks and the
+                // game_won event so historical data stays comparable.
+                // `outcome` is what tells win and tie apart.
+                let humanWon = humanScore == topScore
+                let outcome = humanWon ? (leaderCount > 1 ? "tie" : "win") : "loss"
                 stats.recordGameOver(
                     humanWon: humanWon,
                     humanScore: humanScore,
@@ -719,6 +725,8 @@ struct GameView: View {
                 let duration = gameStartTime.map { Int(Date().timeIntervalSince($0)) } ?? 0
                 let endProps: [String: Any] = [
                     "won": humanWon,
+                    "outcome": outcome,
+                    "leader_count": leaderCount,
                     "my_score": humanScore,
                     "opponent_count": store.state.players.count - 1,
                     "busts": bustsThisGame,
