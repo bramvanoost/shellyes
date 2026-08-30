@@ -45,6 +45,11 @@ struct GameView: View {
     /// out "Wren reads the tide…" while the human's fake dice are
     /// still settling.
     @SwiftUI.State private var bustFrozenPhaseHint: String? = nil
+    /// And freeze the locked dice / running sum. The engine clears
+    /// `setAside` the instant the turn ends, so without this the hero
+    /// number snaps to 0 while the fake dice are still tumbling — the
+    /// player sees their total wiped before they're told they busted.
+    @SwiftUI.State private var bustFrozenSetAside: [Face]? = nil
     private let bustHoldSeconds: Double = 8.0
     /// How long the fake post-bust roll stays on screen before the
     /// flash takes over. Matches the dice animation duration roughly.
@@ -138,6 +143,13 @@ struct GameView: View {
         return players
     }
 
+    /// Locked dice as the player should see them right now: the live
+    /// engine value, except during the post-bust fake-roll window where
+    /// the pre-bust set-aside stays pinned.
+    private var displayedSetAside: [Face] {
+        bustFrozenSetAside ?? store.state.setAside
+    }
+
     private func act(_ action: Action) {
         let humanSeat = GameStore.humanSeat
         let wasHumanTurn = store.isHumanTurn
@@ -157,6 +169,7 @@ struct GameView: View {
         // Snapshot setAside count so we can compute how many dice of
         // the picked face were moved (for stats).
         let beforeSetAsideCount = store.state.setAside.count
+        let beforeSetAside = store.state.setAside
         // Pre-apply snapshots used to freeze the player-turn cues so
         // they don't update ahead of the bust banner.
         let beforeCurrent = store.state.current
@@ -215,6 +228,7 @@ struct GameView: View {
                     bustFrozenCenterTiles = beforeCenter
                     bustFrozenCurrent = beforeCurrent
                     bustFrozenPhaseHint = beforePhaseHint
+                    bustFrozenSetAside = beforeSetAside
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: rollBustVisualDelayNs)
                         triggerBustFlash()
@@ -222,6 +236,7 @@ struct GameView: View {
                         bustFrozenCenterTiles = nil
                         bustFrozenCurrent = nil
                         bustFrozenPhaseHint = nil
+                        bustFrozenSetAside = nil
                     }
                 } else {
                     triggerBustFlash()
@@ -326,6 +341,7 @@ struct GameView: View {
         bustFrozenCenterTiles = nil
         bustFrozenCurrent = nil
         bustFrozenPhaseHint = nil
+        bustFrozenSetAside = nil
         burnedTile = nil
         bustReturnedTile = nil
         stolenFromIdx = nil
@@ -656,9 +672,9 @@ struct GameView: View {
                     } else {
                         DiceStage(
                             phaseHint: displayPhaseHint,
-                            setAsideSum: store.setAsideSum,
+                            setAsideSum: displayedSetAside.reduce(0) { $0 + $1.value },
                             rolled: bustAnimatedRoll ?? store.state.rolled,
-                            locked: store.state.setAside,
+                            locked: displayedSetAside,
                             diceInHand: store.state.diceInHand,
                             isHumanTurn: displayIsHumanTurn,
                             canPick: { store.canPick($0) },
@@ -685,7 +701,7 @@ struct GameView: View {
                     canRoll: store.canRoll,
                     isHumanTurn: displayIsHumanTurn,
                     isOver: store.isOver,
-                    hasSetAside: !store.state.setAside.isEmpty,
+                    hasSetAside: !displayedSetAside.isEmpty,
                     activePlayerName: store.state.players[displayCurrent].id.capitalized,
                     onRoll: { act(.roll) }
                 )
