@@ -27,6 +27,12 @@ final class GameSFX {
     private var nextAIClaimIdx = 0
     private var nextPlayerLossIdx = 0
     private var aiPlayingTask: Task<Void, Never>? = nil
+    private var endMusicFadeTask: Task<Void, Never>? = nil
+    /// Nominal volumes for the two end-of-game stings. Kept as
+    /// constants because `stopEndMusic` fades the players to zero and
+    /// has to put them back before they're reused next game.
+    private static let winnerVolume: Float = 0.85
+    private static let rivalWinVolume: Float = 0.75
 
     /// Irregular cluster of inter-blip gaps (ms) for the AI-playing
     /// pattern. Mix of short bursts and longer pauses so it reads as
@@ -45,8 +51,8 @@ final class GameSFX {
         // tally. Pool sized for overlap at the fastest tick spacing
         // (~40ms) given the clip's full tail.
         load("count", into: &countPool, copies: 16, volume: 0.55)
-        load("winner", into: &winnerPool, copies: 1, volume: 0.85)
-        load("otherwins", into: &rivalWinPool, copies: 1, volume: 0.75)
+        load("winner", into: &winnerPool, copies: 1, volume: Self.winnerVolume)
+        load("otherwins", into: &rivalWinPool, copies: 1, volume: Self.rivalWinVolume)
         // AI-playing blip: ~480ms clip, cluster intervals as low as
         // 120ms, so size the pool for several overlaps.
         load("aiplaying", into: &aiPlayingPool, copies: 6, volume: 0.45)
@@ -101,11 +107,58 @@ final class GameSFX {
     }
 
     func playWinFanfare() {
+        cancelEndMusicFade()
+        winnerPool.first?.volume = Self.winnerVolume
         playSingle(winnerPool.first)
     }
 
     func playRivalWin() {
+        cancelEndMusicFade()
+        rivalWinPool.first?.volume = Self.rivalWinVolume
         playSingle(rivalWinPool.first)
+    }
+
+    /// Fades out whichever end-of-game sting is playing. Leaving the
+    /// fanfare running under a fresh board (or under the splash) makes
+    /// the previous game bleed into the next one, so both exits from
+    /// the tally screen call this. Volume is restored afterwards
+    /// because the pool players are reused for the next game.
+    func stopEndMusic(fade: TimeInterval = 0.45) {
+        cancelEndMusicFade()
+        let fading = endMusicPlayers.filter { $0.player.isPlaying }
+        guard !fading.isEmpty else { return }
+        for entry in fading {
+            entry.player.setVolume(0, fadeDuration: fade)
+        }
+        endMusicFadeTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64((fade + 0.05) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            for entry in fading {
+                entry.player.stop()
+                entry.player.currentTime = 0
+                entry.player.volume = entry.volume
+            }
+        }
+    }
+
+    /// Ends any in-flight fade and puts the stings back at full volume,
+    /// so a cancelled fade can't leave the next game's fanfare silent.
+    private func cancelEndMusicFade() {
+        guard endMusicFadeTask != nil else { return }
+        endMusicFadeTask?.cancel()
+        endMusicFadeTask = nil
+        for entry in endMusicPlayers {
+            entry.player.stop()
+            entry.player.currentTime = 0
+            entry.player.volume = entry.volume
+        }
+    }
+
+    private var endMusicPlayers: [(player: AVAudioPlayer, volume: Float)] {
+        var out: [(AVAudioPlayer, Float)] = []
+        if let p = winnerPool.first { out.append((p, Self.winnerVolume)) }
+        if let p = rivalWinPool.first { out.append((p, Self.rivalWinVolume)) }
+        return out
     }
 
     /// Begins the irregular AI-playing blip pattern. Idempotent —

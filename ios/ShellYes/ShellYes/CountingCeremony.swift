@@ -111,19 +111,30 @@ struct CountingCeremony: View {
 
                 if showNewGame {
                     VStack(spacing: 14) {
-                        Button("New Game") { onNewGame() }
+                        Button("New Game") {
+                            GameSFX.shared.stopEndMusic()
+                            onNewGame()
+                        }
                             .stampButton(primary: true, invite: true)
                             .frame(maxWidth: 280)
 
-                        Button { onHome() } label: {
-                            HStack(spacing: 6) {
+                        Button {
+                            GameSFX.shared.stopEndMusic()
+                            onHome()
+                        } label: {
+                            // Baseline-aligned, not centre-aligned: HOME is
+                            // all caps, so its optical centre sits above the
+                            // box centre and a centred glyph reads as
+                            // sagging next to it.
+                            HStack(alignment: .firstTextBaseline, spacing: 7) {
                                 Image(systemName: "house")
                                     .font(.system(size: 12, weight: .semibold))
                                 Text("HOME")
                                     .font(.avenir(12, weight: .demiBold))
                                     .tracking(2.5)
                             }
-                            .foregroundStyle(Color.dimInk)
+                            .foregroundStyle(Color.stampText)
+                            .shadow(color: Color.treasureInk.opacity(0.28), radius: 3, x: 0, y: 1)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 18)
                             .contentShape(Rectangle())
