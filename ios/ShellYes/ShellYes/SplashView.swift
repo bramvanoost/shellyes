@@ -100,11 +100,14 @@ struct SplashView: View {
                 Spacer()
 
                 VStack(spacing: 6) {
-                    Text("Anti-doom-scrolling soft gaming by @ort.")
+                    Text(Credits.linkedOrt("Anti-doom-scrolling soft gaming by @ort."))
                         .font(.avenir(11, weight: .medium, italic: true))
                         .tracking(0.5)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Color.ink.opacity(0.6))
+                        // Same quiet treatment as the Pixabay credits
+                        // below: link colour matches the line it sits in.
+                        .tint(Color.ink.opacity(0.6))
 
                     // Pixabay attribution per their license terms.
                     Text(creditAttributed)

@@ -181,10 +181,13 @@ struct SettingsView: View {
 
                     Spacer(minLength: 40)
 
-                    Text("v\(AppVersion.short) · shell yes by fastronaut")
+                    Text(Credits.linkedOrt("v\(AppVersion.short) · shell yes by @ort"))
                         .font(.avenir(13, weight: .medium, italic: true))
                         .tracking(1)
                         .foregroundStyle(Color.ink.opacity(0.65))
+                        // Link tinted to match the line around it: this
+                        // is a signature, not a call to action.
+                        .tint(Color.ink.opacity(0.65))
                         .frame(maxWidth: .infinity)
                         .padding(.bottom, 30)
                 }
@@ -348,8 +351,7 @@ private struct AboutSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     private var signOffAttributed: AttributedString {
-        let raw = "Made with sea noises in Ghent, Belgium by [@ort](https://instagram.com/ort)"
-        return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
+        Credits.linkedOrt("Made with sea noises in Ghent, Belgium by @ort")
     }
 
     var body: some View {
