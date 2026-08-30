@@ -395,6 +395,15 @@ private struct AboutSheet: View {
                         .tint(Color.coral)
                         .padding(.top, 2)
 
+                    // Dedication. Quieter than the sign-off above it,
+                    // louder than the version below, so it reads as an
+                    // aside rather than another credit line.
+                    Text("For MME&R, play forever.")
+                        .font(.avenir(11, weight: .medium, italic: true))
+                        .tracking(0.5)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.ink.opacity(0.45))
+
                     Text("v\(AppVersion.short)")
                         .font(.avenir(11, weight: .medium, italic: true))
                         .tracking(1)
