@@ -71,6 +71,12 @@ struct GameView: View {
     // event. Reset on each new game.
     @SwiftUI.State private var gameStartTime: Date?
     @SwiftUI.State private var bustsThisGame: Int = 0
+    #if DEBUG
+    /// Debug-menu shortcut to the stats screen. A sheet rather than a
+    /// nav push because Menu buttons can't drive the NavigationStack
+    /// path from here.
+    @SwiftUI.State private var debugShowStats: Bool = false
+    #endif
     @SwiftUI.State private var stealsThisGame: Int = 0
     @SwiftUI.State private var biggestKeepThisGame: Int = 0
     @SwiftUI.State private var gameEndedReported: Bool = false
@@ -645,6 +651,16 @@ struct GameView: View {
                             store.debugForceGameOver()
                         }
                         #endif
+                    },
+                    onDebugSeedBests: {
+                        #if DEBUG
+                        stats.debugSeedBestRuns()
+                        #endif
+                    },
+                    onDebugShowStats: {
+                        #if DEBUG
+                        debugShowStats = true
+                        #endif
                     }
                 )
                 .opacity(revealChrome ? 1 : 0)
@@ -884,6 +900,11 @@ struct GameView: View {
             )
         }
         .navigationBarHidden(true)
+        #if DEBUG
+        .sheet(isPresented: $debugShowStats) {
+            StatsView(stats: stats)
+        }
+        #endif
     }
 }
 
@@ -893,6 +914,8 @@ struct ChromeBar: View {
     var onDebugSteal: (() -> Void)? = nil
     var onDebugBankChoice: (() -> Void)? = nil
     var onDebugEndGame: (() -> Void)? = nil
+    var onDebugSeedBests: (() -> Void)? = nil
+    var onDebugShowStats: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -916,7 +939,13 @@ struct ChromeBar: View {
                     Button("Trigger bank choice", systemImage: "questionmark.diamond.fill", action: onDebugBankChoice)
                 }
                 if let onDebugEndGame {
-                    Button("End game (tally screen)", systemImage: "flag.checkered", action: onDebugEndGame)
+                    Button("End game (tally + Home button)", systemImage: "flag.checkered", action: onDebugEndGame)
+                }
+                if let onDebugSeedBests {
+                    Button("Seed personal bests", systemImage: "trophy.fill", action: onDebugSeedBests)
+                }
+                if let onDebugShowStats {
+                    Button("Open stats", systemImage: "chart.bar.fill", action: onDebugShowStats)
                 }
             } label: {
                 Image(systemName: "ladybug.fill")

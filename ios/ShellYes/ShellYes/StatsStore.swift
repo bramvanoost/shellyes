@@ -187,6 +187,32 @@ final class StatsStore {
         )
     }
 
+    #if DEBUG
+    /// Fills the leaderboard with plausible runs so the "personal
+    /// bests" card can be eyeballed without playing five games. Dates
+    /// walk backwards a few days apart so the weekday labels differ.
+    func debugSeedBestRuns() {
+        let seeds: [(Int, String, String, Bool, Int)] = [
+            (34, "hard", "slow", true, 0),
+            (31, "normal", "fast", true, 2),
+            (28, "hard", "fast", false, 5),
+            (24, "easy", "slow", true, 9),
+            (19, "normal", "slow", false, 12),
+        ]
+        for (score, difficulty, pace, won, daysAgo) in seeds {
+            fileRun(
+                ScoreRecord(
+                    score: score,
+                    date: Date().addingTimeInterval(-Double(daysAgo) * 86_400),
+                    difficulty: difficulty,
+                    pace: pace,
+                    won: won
+                )
+            )
+        }
+    }
+    #endif
+
     /// Inserts a run into the leaderboard and trims it back to size.
     /// Sorted by score, then by recency, so the newest of two equal
     /// scores sits on top and a stale record can be pushed out by
