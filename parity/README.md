@@ -1,7 +1,7 @@
 # Cross-engine parity harness
 
 Asserts byte-equivalent state traces between the TypeScript engine
-(`src/engine.ts`) and the Swift engine (`ios/CHINGEngine`).
+(`src/engine.ts`) and the Swift engine (`ios/ShellYesEngine`).
 
 ## Run
 
