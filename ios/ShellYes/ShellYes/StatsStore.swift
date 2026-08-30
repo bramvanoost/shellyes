@@ -209,6 +209,16 @@ final class StatsStore {
                     won: won
                 )
             )
+            // The scalar totals are what the Settings mini-card and the
+            // rest of the stats screen read. Seeding only `bestRuns`
+            // left every other number at zero, which reads as a bug.
+            gamesPlayed += 1
+            if won { wins += 1 }
+            if score > bestScore { bestScore = score }
+            gamesByDifficulty[difficulty, default: 0] += 1
+            if won { winsByDifficulty[difficulty, default: 0] += 1 }
+            gamesByPace[pace, default: 0] += 1
+            if won { winsByPace[pace, default: 0] += 1 }
         }
     }
     #endif

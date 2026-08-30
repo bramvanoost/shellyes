@@ -22,7 +22,11 @@ struct StatsView: View {
                             StatRow(label: "Games played", value: "\(stats.gamesPlayed)")
                             StatRow(label: "Wins", value: winsValue)
                             StatRow(label: "Win streak", value: streakValue)
-                            StatRow(label: "Best score", value: bestScoreValue)
+                            if let best = stats.bestRuns.first {
+                                BestScoreRow(run: best)
+                            } else {
+                                StatRow(label: "Best score", value: bestScoreValue)
+                            }
                         }
                     }
 
@@ -32,16 +36,6 @@ struct StatsView: View {
                             StatRow(label: "Steals", value: "\(stats.steals)")
                             StatRow(label: "Busts", value: "\(stats.busts)")
                             StatRow(label: "Hot face", value: hotFaceValue)
-                        }
-                    }
-
-                    if !stats.bestRuns.isEmpty {
-                        glassCard {
-                            StatsSection(title: "personal bests") {
-                                ForEach(Array(stats.bestRuns.enumerated()), id: \.element.id) { i, run in
-                                    BestRunRow(rank: i + 1, run: run, isTop: i == 0)
-                                }
-                            }
                         }
                     }
 
@@ -155,47 +149,39 @@ private struct StatRow: View {
     }
 }
 
-/// One leaderboard line: rank and score on the left, the run's story
-/// (day, then the settings it was played under) stacked on the right.
-/// The top record gets the coral treatment so the card has a peak
-/// instead of five identical rows.
-private struct BestRunRow: View {
-    let rank: Int
+/// Best score with its story on one line: the number (crowned if that
+/// run was a win) over the day it happened and the settings it was
+/// played under. A bare "34" says nothing about where it came from.
+private struct BestScoreRow: View {
     let run: ScoreRecord
-    let isTop: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("\(rank)")
-                .font(.avenir(13, weight: .medium, italic: true))
-                .foregroundStyle(Color.dimInk)
-                .frame(width: 14, alignment: .leading)
+        HStack(alignment: .firstTextBaseline) {
+            Text("Best score")
+                .font(.avenir(15, weight: .medium))
+                .foregroundStyle(Color.ink)
 
-            Text("\(run.score)")
-                .font(.avenir(isTop ? 26 : 20, weight: .demiBold))
-                .foregroundStyle(isTop ? Color.coral : Color.ink)
-                .monospacedDigit()
-                .frame(width: 46, alignment: .leading)
-
-            if run.won {
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.coinGoldLight)
-            }
-
-            Spacer(minLength: 6)
+            Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text(run.dayLabel)
-                    .font(.avenir(13, weight: .medium))
-                    .foregroundStyle(Color.ink.opacity(0.85))
-                Text(run.settingLabel)
+                HStack(spacing: 5) {
+                    if run.won {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.coinGoldLight)
+                    }
+                    Text("\(run.score)")
+                        .font(.avenir(15, weight: .demiBold))
+                        .foregroundStyle(Color.ink.opacity(0.85))
+                        .monospacedDigit()
+                }
+                Text("\(run.dayLabel) · \(run.settingLabel)")
                     .font(.avenir(11, weight: .medium, italic: true))
                     .tracking(0.5)
                     .foregroundStyle(Color.dimInk)
             }
         }
-        .padding(.vertical, isTop ? 10 : 7)
+        .padding(.vertical, 8)
     }
 }
 

@@ -82,7 +82,11 @@ struct SettingsView: View {
                             StatRow(label: "Games played", value: "\(stats.gamesPlayed)")
                             StatRow(label: "Wins", value: winsValue)
                             StatRow(label: "Win streak", value: streakValue)
-                            StatRow(label: "Best score", value: bestScoreValue)
+                            StatRow(
+                                label: "Best score",
+                                value: bestScoreValue,
+                                crowned: stats.bestRuns.first?.won == true
+                            )
                             NavigationLink(value: Route.stats) {
                                 SettingsRow(title: "All statistics") {
                                     Image(systemName: "chevron.right")
@@ -275,6 +279,9 @@ struct SettingsView: View {
 private struct StatRow: View {
     let label: String
     let value: String
+    /// Marks a best score that was set in a game you actually won,
+    /// matching the crown on the stats screen.
+    var crowned: Bool = false
 
     var body: some View {
         HStack {
@@ -282,6 +289,11 @@ private struct StatRow: View {
                 .font(.avenir(15, weight: .medium))
                 .foregroundStyle(Color.ink)
             Spacer()
+            if crowned {
+                Image(systemName: "crown.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.coinGoldLight)
+            }
             Text(value)
                 .font(.avenir(15, weight: .demiBold))
                 .foregroundStyle(Color.ink.opacity(0.85))
