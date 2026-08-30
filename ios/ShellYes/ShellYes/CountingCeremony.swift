@@ -18,6 +18,10 @@ struct CountingCeremony: View {
     let players: [Player]
     let scores: [Int]
     let onNewGame: () -> Void
+    /// Secondary exit: back to the splash instead of straight into
+    /// another game. Kept visually quiet so "New Game" stays the
+    /// obvious tap.
+    let onHome: () -> Void
 
     @SwiftUI.State private var revealedPlayer: Int = -1   // index currently or last animated
     @SwiftUI.State private var tickedTotals: [Int] = []
@@ -106,12 +110,29 @@ struct CountingCeremony: View {
                 Spacer()
 
                 if showNewGame {
-                    Button("New Game") { onNewGame() }
-                        .stampButton(primary: true, invite: true)
-                        .frame(maxWidth: 280)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 40)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    VStack(spacing: 14) {
+                        Button("New Game") { onNewGame() }
+                            .stampButton(primary: true, invite: true)
+                            .frame(maxWidth: 280)
+
+                        Button { onHome() } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "house")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("HOME")
+                                    .font(.avenir(12, weight: .demiBold))
+                                    .tracking(2.5)
+                            }
+                            .foregroundStyle(Color.dimInk)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 18)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 32)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
         }

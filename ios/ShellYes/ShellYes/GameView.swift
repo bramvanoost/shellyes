@@ -6,6 +6,7 @@ struct GameView: View {
     let settings: SettingsStore
     let stats: StatsStore
     @Environment(\.accessibilityReduceMotion) private var iosReduceMotion
+    @Environment(\.goHome) private var goHome
     @SwiftUI.State private var bustFlash: Bool = false
     @SwiftUI.State private var bustReason: BustReason = .rolled
     @SwiftUI.State private var burnedTile: Int? = nil
@@ -336,6 +337,15 @@ struct GameView: View {
     /// "New Game" from the tie screen and land on a live board with a
     /// stale modal still open).
     private func startNewGame() {
+        resetTransientGameUI()
+        store.dismissAIEvent()
+        store.newGame()
+    }
+
+    /// Clears every per-game UI flag. Shared by "New Game" and the
+    /// tally screen's Home exit — leaving these set would carry a
+    /// stale flash or banner into whatever comes next.
+    private func resetTransientGameUI() {
         bustFlash = false
         bustAnimatedRoll = nil
         bustFrozenCenterTiles = nil
@@ -350,8 +360,6 @@ struct GameView: View {
         stealsThisGame = 0
         biggestKeepThisGame = 0
         gameEndedReported = false
-        store.dismissAIEvent()
-        store.newGame()
     }
 
     private func detectSteal(oldCounts: [Int], newCounts: [Int]) {
@@ -860,7 +868,19 @@ struct GameView: View {
             CountingCeremony(
                 players: store.state.players,
                 scores: store.scores,
-                onNewGame: { startNewGame() }
+                onNewGame: {
+                    Telemetry.shared.track("game_end_action", props: ["choice": "new_game"])
+                    startNewGame()
+                },
+                onHome: {
+                    Telemetry.shared.track("game_end_action", props: ["choice": "home"])
+                    resetTransientGameUI()
+                    store.dismissAIEvent()
+                    // goHome starts a fresh game and drains the nav
+                    // stack, so `store.isOver` flips false and this
+                    // cover dismisses on its own.
+                    goHome()
+                }
             )
         }
         .navigationBarHidden(true)
