@@ -20,6 +20,19 @@ struct SettingsView: View {
     @SwiftUI.State private var showExplainer = false
     @SwiftUI.State private var showRestartConfirm = false
     @SwiftUI.State private var placeholderOff = false
+    @SwiftUI.State private var gameCenterPane: GameCenterSheet.Pane?
+
+    /// Signed in: open Apple's screen. Not signed in: offer the sheet
+    /// GameKit handed us at launch and held. If there's neither, Game
+    /// Center is unavailable on this device and silence beats an error
+    /// the player can't act on from Settings.
+    private func openGameCenter(_ pane: GameCenterSheet.Pane) {
+        if GameCenter.shared.isAuthenticated {
+            gameCenterPane = pane
+        } else {
+            GameCenter.shared.presentSignInFromKeyWindow()
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -89,6 +102,31 @@ struct SettingsView: View {
                             )
                             NavigationLink(value: Route.stats) {
                                 SettingsRow(title: "All statistics") {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.coral)
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            // Game Center. Tapping either row is the only
+                            // moment Apple's sign-in sheet can appear —
+                            // nothing prompts on the splash or the tally.
+                            Button {
+                                openGameCenter(.leaderboards)
+                            } label: {
+                                SettingsRow(title: "Leaderboards") {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.coral)
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                openGameCenter(.achievements)
+                            } label: {
+                                SettingsRow(title: "Achievements") {
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundStyle(Color.coral)
@@ -202,6 +240,10 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showExplainer) {
             ExplainerView()
+        }
+        .sheet(item: $gameCenterPane) { pane in
+            GameCenterSheet(pane: pane) { gameCenterPane = nil }
+                .ignoresSafeArea()
         }
         .alert("Start a new game?", isPresented: $showRestartConfirm) {
             Button("New game", role: .destructive) {

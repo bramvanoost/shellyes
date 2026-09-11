@@ -21,6 +21,9 @@ struct ShellYesApp: App {
         // is a public identifier (like a Stripe publishable key);
         // safe to ship in the binary.
         Telemetry.shared.initialize(appKey: "A-SH-7882093279")
+        // Silent: if the player isn't signed in, GameKit hands us a
+        // sheet and we hold it until they tap Leaderboards themselves.
+        GameCenter.shared.authenticate()
     }
 
     var body: some Scene {
@@ -85,6 +88,10 @@ struct ShellYesApp: App {
                     // volume buttons keep driving media volume.
                     AudioPolicy.shared.configureSession()
                     Telemetry.shared.track("app_opened")
+                    // One-time catch-up for players who had a history
+                    // before Game Center existed. No-ops if unsigned or
+                    // already done.
+                    GameCenter.shared.backfillIfNeeded(from: stats)
                 case .background:
                     let seconds = sessionStart.map { Int(Date().timeIntervalSince($0)) } ?? 0
                     Telemetry.shared.track("app_closed", props: [

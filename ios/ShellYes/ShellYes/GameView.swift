@@ -79,6 +79,12 @@ struct GameView: View {
     #endif
     @SwiftUI.State private var stealsThisGame: Int = 0
     @SwiftUI.State private var biggestKeepThisGame: Int = 0
+    /// Every shell the human claimed this game, for the Bookends
+    /// achievement (21 and 36 in one game).
+    @SwiftUI.State private var claimedShellsThisGame: Set<Int> = []
+    /// True when the human's own claim emptied the sand and ended
+    /// the game. Independent of whether they went on to win it.
+    @SwiftUI.State private var endedByClaimingLastShell: Bool = false
     @SwiftUI.State private var gameEndedReported: Bool = false
 
     /// Seat index used by every UI element that highlights "whose turn
@@ -287,6 +293,8 @@ struct GameView: View {
                     stats.recordBank(sum: claimed, stoleATile: victim != nil)
                     if claimed > biggestKeepThisGame { biggestKeepThisGame = claimed }
                     if victim != nil { stealsThisGame += 1 }
+                    claimedShellsThisGame.insert(claimed)
+                    if isFinal { endedByClaimingLastShell = true }
                     Telemetry.shared.track("game_bank", props: [
                         "tile_value": claimed,
                         "stole_from_rival": victim != nil,
@@ -365,6 +373,8 @@ struct GameView: View {
         bustsThisGame = 0
         stealsThisGame = 0
         biggestKeepThisGame = 0
+        claimedShellsThisGame = []
+        endedByClaimingLastShell = false
         gameEndedReported = false
     }
 
@@ -779,6 +789,27 @@ struct GameView: View {
                 ]
                 Telemetry.shared.track("game_ended", props: endProps)
                 Telemetry.shared.track(humanWon ? "game_won" : "game_lost", props: endProps)
+
+                // Game Center hears the same finished game. `stats` has
+                // already recorded it above, so the lifetime totals
+                // include this run and a milestone can land on it.
+                GameCenter.shared.recordGameOver(
+                    summary: GameSummary(
+                        won: humanWon,
+                        score: humanScore,
+                        difficulty: settings.difficulty.rawValue,
+                        busts: bustsThisGame,
+                        steals: stealsThisGame,
+                        claimedShells: claimedShellsThisGame,
+                        endedByClaimingLastShell: endedByClaimingLastShell
+                    ),
+                    lifetime: LifetimeTotals(
+                        gamesPlayed: stats.gamesPlayed,
+                        wins: stats.wins,
+                        bestStreak: stats.bestStreak
+                    ),
+                    biggestKeep: stats.biggestKeep
+                )
             }
         }
         .overlay {
@@ -946,6 +977,12 @@ struct ChromeBar: View {
                 }
                 if let onDebugShowStats {
                     Button("Open stats", systemImage: "chart.bar.fill", action: onDebugShowStats)
+                }
+                // Design tool: writes the fourteen 512x512 achievement
+                // PNGs to the app's Documents directory, ready to
+                // upload to App Store Connect.
+                Button("Export achievement badges", systemImage: "square.and.arrow.up") {
+                    AchievementArtExporter.exportAll()
                 }
             } label: {
                 Image(systemName: "ladybug.fill")
