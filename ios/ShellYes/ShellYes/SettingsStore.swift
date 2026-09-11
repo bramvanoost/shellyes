@@ -89,7 +89,12 @@ final class SettingsStore {
 
     init() {
         let rawDiff = UserDefaults.standard.string(forKey: Self.difficultyKey) ?? ""
-        self.difficulty = Difficulty(rawValue: rawDiff) ?? .normal
+        // Fresh installs open on Easy so a first game can't feel
+        // punishing. Only the fallback changes: anyone who has already
+        // picked a difficulty has the key written and keeps their
+        // choice. The Easy leaderboard is the default board in Game
+        // Center for the same reason.
+        self.difficulty = Difficulty(rawValue: rawDiff) ?? .easy
 
         let rawMode = UserDefaults.standard.string(forKey: Self.colorModeKey) ?? ""
         self.colorMode = ColorMode(rawValue: rawMode) ?? .system

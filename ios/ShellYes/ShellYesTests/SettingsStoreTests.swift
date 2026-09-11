@@ -24,9 +24,9 @@ final class SettingsStoreTests: XCTestCase {
         super.tearDown()
     }
 
-    func test_difficulty_defaultIsNormal() {
+    func test_difficulty_defaultIsEasy() {
         let store = SettingsStore()
-        XCTAssertEqual(store.difficulty, .normal)
+        XCTAssertEqual(store.difficulty, .easy)
     }
 
     func test_difficulty_persistsAcrossInstances() {
