@@ -147,7 +147,7 @@ private enum ExplainerPage: Int, CaseIterable {
         case .pearl:
             return "At least one pearl in your number lets you claim or steal a shell. Try without and you missed the wave."
         case .pick:
-            return "Picking 3 here takes those three dice out of the pool — your count is six. 3 is off the table this turn."
+            return "Picking 3 here takes those three dice out of the pool — your count is nine. 3 is off the table this turn."
         case .keep:
             return "Stop and the ocean gives you the highest shell up to your number. More pearls is better. Match a rival's top shell exactly and you steal theirs."
         case .bust:
