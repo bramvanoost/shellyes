@@ -20,19 +20,7 @@ struct SettingsView: View {
     @SwiftUI.State private var showExplainer = false
     @SwiftUI.State private var showRestartConfirm = false
     @SwiftUI.State private var placeholderOff = false
-    @SwiftUI.State private var gameCenterPane: GameCenterSheet.Pane?
-
-    /// Signed in: open Apple's screen. Not signed in: offer the sheet
-    /// GameKit handed us at launch and held. If there's neither, Game
-    /// Center is unavailable on this device and silence beats an error
-    /// the player can't act on from Settings.
-    private func openGameCenter(_ pane: GameCenterSheet.Pane) {
-        if GameCenter.shared.isAuthenticated {
-            gameCenterPane = pane
-        } else {
-            GameCenter.shared.presentSignInFromKeyWindow()
-        }
-    }
+    @SwiftUI.State private var gameCenter = GameCenterEntry()
 
     var body: some View {
         ZStack {
@@ -113,7 +101,7 @@ struct SettingsView: View {
                             // moment Apple's sign-in sheet can appear —
                             // nothing prompts on the splash or the tally.
                             Button {
-                                openGameCenter(.leaderboards)
+                                gameCenter.open(.leaderboards, from: .settings)
                             } label: {
                                 SettingsRow(title: "Leaderboards") {
                                     Image(systemName: "chevron.right")
@@ -124,7 +112,7 @@ struct SettingsView: View {
                             .buttonStyle(.plain)
 
                             Button {
-                                openGameCenter(.achievements)
+                                gameCenter.open(.achievements, from: .settings)
                             } label: {
                                 SettingsRow(title: "Achievements") {
                                     Image(systemName: "chevron.right")
@@ -241,10 +229,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showExplainer) {
             ExplainerView()
         }
-        .sheet(item: $gameCenterPane) { pane in
-            GameCenterSheet(pane: pane) { gameCenterPane = nil }
-                .ignoresSafeArea()
-        }
+        .gameCenterEntry(gameCenter)
         .alert("Start a new game?", isPresented: $showRestartConfirm) {
             Button("New game", role: .destructive) {
                 onNewGame()

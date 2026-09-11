@@ -3,11 +3,19 @@ import SwiftUI
 struct SplashView: View {
     let store: GameStore
     let settings: SettingsStore
+    let stats: StatsStore
 
     @SwiftUI.State private var logoVisible: Bool = false
     @SwiftUI.State private var actionsVisible: Bool = false
     @SwiftUI.State private var creditVisible: Bool = false
     @SwiftUI.State private var showExplainer: Bool = false
+    @SwiftUI.State private var gameCenter = GameCenterEntry()
+
+    /// A player who has finished a game has been taught by playing it.
+    /// The outline slot stops explaining and starts pointing at the
+    /// boards instead; How to Play keeps its permanent home in
+    /// Settings, so nothing is lost.
+    private var hasPlayed: Bool { stats.gamesPlayed > 0 }
 
     private var creditAttributed: AttributedString {
         let raw = "Background music by [Alfarran Basalim](https://pixabay.com/users/farran_ez-45967570/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=456148) from [Pixabay](https://pixabay.com/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=456148)."
@@ -60,37 +68,41 @@ struct SplashView: View {
                     .stampButton(primary: true, invite: true)
                     .frame(maxWidth: 280)
 
-                    Button {
-                        showExplainer = true
-                    } label: {
-                        Text("How to Play")
-                            .font(.avenir(16, weight: .demiBold))
-                            .textCase(.uppercase)
-                            .tracking(3)
-                            .foregroundStyle(Color.ink.opacity(0.75))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal, 16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .strokeBorder(Color.ink.opacity(0.45), lineWidth: 1.5)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: 280)
-
-                    NavigationLink(value: Route.settings) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 12, weight: .light))
-                            Text("settings")
-                                .font(.avenir(13, weight: .medium, italic: true))
-                                .tracking(2)
-                                .textCase(.lowercase)
+                    if hasPlayed {
+                        Button {
+                            gameCenter.open(.leaderboards, from: .home)
+                        } label: {
+                            OutlineLabel(title: "Leaderboards")
                         }
-                        .foregroundStyle(Color.ink.opacity(0.5))
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 18)
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: 280)
+                    } else {
+                        Button {
+                            showExplainer = true
+                        } label: {
+                            OutlineLabel(title: "How to Play")
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: 280)
+                    }
+
+                    // The quiet row. Achievements only joins it once
+                    // there is a game behind the player; before that
+                    // every badge is locked and the row would be an
+                    // invitation to disappointment.
+                    HStack(spacing: 4) {
+                        if hasPlayed {
+                            Button {
+                                gameCenter.open(.achievements, from: .home)
+                            } label: {
+                                QuietLabel(icon: "rosette", title: "achievements")
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        NavigationLink(value: Route.settings) {
+                            QuietLabel(icon: "gearshape", title: "settings")
+                        }
                     }
                 }
                 .opacity(actionsVisible ? 1 : 0)
@@ -137,6 +149,7 @@ struct SplashView: View {
         .sheet(isPresented: $showExplainer) {
             ExplainerView()
         }
+        .gameCenterEntry(gameCenter)
         .task {
             #if DEBUG
             IconExporter.exportIfNeeded()
@@ -154,5 +167,47 @@ struct SplashView: View {
                 creditVisible = true
             }
         }
+    }
+}
+
+/// The secondary action on the splash: an outlined stamp that carries
+/// whichever job the home screen currently has for it.
+private struct OutlineLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.avenir(16, weight: .demiBold))
+            .textCase(.uppercase)
+            .tracking(3)
+            .foregroundStyle(Color.ink.opacity(0.75))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color.ink.opacity(0.45), lineWidth: 1.5)
+            )
+    }
+}
+
+/// The quietest tier on the splash: lowercase italic with a hairline
+/// icon, for the things a player goes looking for rather than lands on.
+private struct QuietLabel: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .light))
+            Text(title)
+                .font(.avenir(13, weight: .medium, italic: true))
+                .tracking(2)
+                .textCase(.lowercase)
+        }
+        .foregroundStyle(Color.ink.opacity(0.5))
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
     }
 }

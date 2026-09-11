@@ -29,7 +29,7 @@ struct ShellYesApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $path) {
-                SplashView(store: store, settings: settings)
+                SplashView(store: store, settings: settings, stats: stats)
                     .navigationDestination(for: Route.self) { route in
                         switch route {
                         case .game:
