@@ -67,6 +67,13 @@ struct ShellYesApp: App {
                 path = NavigationPath()
                 path.append(Route.game)
             })
+            #if DEBUG
+            .task {
+                if AchievementArtExporter.isRequestedByLaunchArgument {
+                    AchievementArtExporter.exportAll()
+                }
+            }
+            #endif
             .preferredColorScheme(settings.colorMode.preferredScheme)
             // Lifecycle telemetry — fires regardless of whether the
             // user does anything in-game, so app_opened captures even
