@@ -8,7 +8,7 @@ import Observation
 struct GameCenterSheet: UIViewControllerRepresentable {
     /// Identifiable so `.sheet(item:)` can drive it — one optional
     /// instead of a bool per pane.
-    enum Pane: Identifiable {
+    enum Pane: Identifiable, CaseIterable {
         case leaderboards
         case achievements
 
@@ -61,8 +61,13 @@ struct GameCenterSheet: UIViewControllerRepresentable {
 @MainActor
 @Observable
 final class GameCenterEntry {
-    /// Which pane is showing, if any. Drives `.sheet(item:)`.
+    /// Which pane of Apple's sheet is showing, if any. Drives
+    /// `.sheet(item:)`.
     var pane: GameCenterSheet.Pane?
+
+    /// Which pane of *our* empty sheet is showing, if any. Mutually
+    /// exclusive with `pane` — a tap resolves to one or the other.
+    var emptyPane: GameCenterSheet.Pane?
 
     /// Set when there is nothing at all we can show: not signed in and
     /// GameKit never handed us a sign-in sheet, which is what happens
@@ -76,9 +81,24 @@ final class GameCenterEntry {
         case settings
     }
 
-    func open(_ pane: GameCenterSheet.Pane, from source: Source) {
+    /// The source of the most recent tap, so the empty sheet can
+    /// attribute its own New Game event to the screen the player
+    /// actually came from.
+    private(set) var lastSource: Source = .home
+
+    /// `hasPlayed` is false until a game has been finished. It is passed
+    /// in rather than read here so this type stays free of `StatsStore`.
+    func open(_ pane: GameCenterSheet.Pane, from source: Source, hasPlayed: Bool) {
+        lastSource = source
         let outcome: String
-        if GameCenter.shared.isAuthenticated {
+        if !hasPlayed {
+            // Checked before anything touches GameKit, on purpose: a
+            // player with no score has nothing to see on either board,
+            // and routing through Apple's sheet would also drag a
+            // sign-in prompt into a first run.
+            emptyPane = pane
+            outcome = "empty"
+        } else if GameCenter.shared.isAuthenticated {
             self.pane = pane
             outcome = "opened"
         } else if GameCenter.shared.presentSignInFromKeyWindow() {
@@ -103,6 +123,11 @@ extension View {
             .sheet(item: Binding(get: { entry.pane }, set: { entry.pane = $0 })) { pane in
                 GameCenterSheet(pane: pane) { entry.pane = nil }
                     .ignoresSafeArea()
+            }
+            .sheet(item: Binding(get: { entry.emptyPane }, set: { entry.emptyPane = $0 })) { pane in
+                GameCenterEmptyView(pane: pane, from: entry.lastSource) {
+                    entry.emptyPane = nil
+                }
             }
             .alert(
                 "Game Center is off",

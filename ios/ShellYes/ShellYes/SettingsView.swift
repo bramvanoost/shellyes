@@ -101,7 +101,7 @@ struct SettingsView: View {
                             // moment Apple's sign-in sheet can appear —
                             // nothing prompts on the splash or the tally.
                             Button {
-                                gameCenter.open(.leaderboards, from: .settings)
+                                gameCenter.open(.leaderboards, from: .settings, hasPlayed: stats.gamesPlayed > 0)
                             } label: {
                                 SettingsRow(title: "Leaderboards") {
                                     Image(systemName: "chevron.right")
@@ -112,7 +112,7 @@ struct SettingsView: View {
                             .buttonStyle(.plain)
 
                             Button {
-                                gameCenter.open(.achievements, from: .settings)
+                                gameCenter.open(.achievements, from: .settings, hasPlayed: stats.gamesPlayed > 0)
                             } label: {
                                 SettingsRow(title: "Achievements") {
                                     Image(systemName: "chevron.right")

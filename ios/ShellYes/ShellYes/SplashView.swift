@@ -11,10 +11,9 @@ struct SplashView: View {
     @SwiftUI.State private var showExplainer: Bool = false
     @SwiftUI.State private var gameCenter = GameCenterEntry()
 
-    /// A player who has finished a game has been taught by playing it.
-    /// The outline slot stops explaining and starts pointing at the
-    /// boards instead; How to Play keeps its permanent home in
-    /// Settings, so nothing is lost.
+    /// False until a game has been finished. It no longer decides
+    /// whether the Game Center entries appear — they always do — only
+    /// whether tapping one reaches Apple's sheet or our empty one.
     private var hasPlayed: Bool { stats.gamesPlayed > 0 }
 
     private var creditAttributed: AttributedString {
@@ -68,37 +67,30 @@ struct SplashView: View {
                     .stampButton(primary: true, invite: true)
                     .frame(maxWidth: 280)
 
-                    if hasPlayed {
-                        Button {
-                            gameCenter.open(.leaderboards, from: .home)
-                        } label: {
-                            OutlineLabel(title: "Leaderboards")
-                        }
-                        .buttonStyle(.plain)
-                        .frame(maxWidth: 280)
-                    } else {
-                        Button {
-                            showExplainer = true
-                        } label: {
-                            OutlineLabel(title: "How to Play")
-                        }
-                        .buttonStyle(.plain)
-                        .frame(maxWidth: 280)
+                    Button {
+                        showExplainer = true
+                    } label: {
+                        OutlineLabel(title: "How to Play")
                     }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: 280)
 
-                    // The quiet row. Achievements only joins it once
-                    // there is a game behind the player; before that
-                    // every badge is locked and the row would be an
-                    // invitation to disappointment.
+                    Button {
+                        gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                    } label: {
+                        OutlineLabel(title: "Leaderboards")
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: 280)
+
+                    // The quiet row.
                     HStack(spacing: 4) {
-                        if hasPlayed {
-                            Button {
-                                gameCenter.open(.achievements, from: .home)
-                            } label: {
-                                QuietLabel(icon: "rosette", title: "achievements")
-                            }
-                            .buttonStyle(.plain)
+                        Button {
+                            gameCenter.open(.achievements, from: .home, hasPlayed: hasPlayed)
+                        } label: {
+                            QuietLabel(icon: "rosette", title: "achievements")
                         }
+                        .buttonStyle(.plain)
 
                         NavigationLink(value: Route.settings) {
                             QuietLabel(icon: "gearshape", title: "settings")

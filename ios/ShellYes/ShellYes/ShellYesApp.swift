@@ -60,6 +60,13 @@ struct ShellYesApp: App {
                 store.newGame()
                 path = NavigationPath()
             })
+            // Drain the stack before pushing, so tapping New Game from
+            // a sheet deep in Settings lands on one game screen rather
+            // than one stacked on top of the settings it came from.
+            .environment(\.startGame, StartGameAction {
+                path = NavigationPath()
+                path.append(Route.game)
+            })
             .preferredColorScheme(settings.colorMode.preferredScheme)
             // Lifecycle telemetry — fires regardless of whether the
             // user does anything in-game, so app_opened captures even
@@ -132,5 +139,25 @@ extension EnvironmentValues {
     var goHome: GoHomeAction {
         get { self[GoHomeKey.self] }
         set { self[GoHomeKey.self] = newValue }
+    }
+}
+
+/// The mirror of `goHome`: pushes the game onto the nav path from
+/// anywhere. Needed because a sheet can't hold a `NavigationLink` into
+/// the stack that presents it, and the empty Game Center sheet offers
+/// New Game from both the splash and Settings.
+struct StartGameAction {
+    let action: () -> Void
+    func callAsFunction() { action() }
+}
+
+private struct StartGameKey: EnvironmentKey {
+    static let defaultValue = StartGameAction(action: {})
+}
+
+extension EnvironmentValues {
+    var startGame: StartGameAction {
+        get { self[StartGameKey.self] }
+        set { self[StartGameKey.self] = newValue }
     }
 }
