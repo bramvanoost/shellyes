@@ -927,7 +927,13 @@ struct GameView: View {
                     // stack, so `store.isOver` flips false and this
                     // cover dismisses on its own.
                     goHome()
-                }
+                },
+                // Evaluated as the tally appears, so `stats` already
+                // includes the game that just finished.
+                reviewEligible: ReviewPrompt.shared.isEligible(
+                    gamesPlayed: stats.gamesPlayed,
+                    wins: stats.wins
+                )
             )
         }
         .navigationBarHidden(true)

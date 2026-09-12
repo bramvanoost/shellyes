@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 import ShellYesEngine
 
 /// Per-winner-card frame anchors, published from each winning card up to
@@ -22,6 +23,12 @@ struct CountingCeremony: View {
     /// another game. Kept visually quiet so "New Game" stays the
     /// obvious tap.
     let onHome: () -> Void
+    /// Whether `ReviewPrompt` says this player has earned an ask. The
+    /// win itself is checked here; the history lives at the call site,
+    /// which is the one that can see `StatsStore`.
+    var reviewEligible: Bool = false
+
+    @Environment(\.requestReview) private var requestReview
 
     @SwiftUI.State private var revealedPlayer: Int = -1   // index currently or last animated
     @SwiftUI.State private var tickedTotals: [Int] = []
@@ -328,6 +335,23 @@ struct CountingCeremony: View {
         try? await Task.sleep(nanoseconds: 900_000_000)
         withAnimation(.easeOut(duration: 0.4)) {
             showNewGame = true
+        }
+
+        // Ask for a rating on the player's own win, once the
+        // celebration has landed and the buttons are up — the most
+        // positive, least interrupted moment the app has. A tie
+        // doesn't count; "It's a beach tie!" is not a rave review.
+        //
+        // Runs in its own Task so the sparkle loops below start on
+        // time rather than waiting out the delay.
+        if reviewEligible, isHumanWin {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_400_000_000)
+                guard !Task.isCancelled else { return }
+                ReviewPrompt.shared.markAsked()
+                Telemetry.shared.track("review_prompt_shown")
+                requestReview()
+            }
         }
 
         // Keep the winner card ringed in sparkles while the celebration is up.
