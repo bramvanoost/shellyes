@@ -78,10 +78,18 @@ struct SplashView: View {
             Background()
 
             VStack(spacing: 0) {
-                Spacer()
+                // Bounded rather than a free Spacer, so the shell and
+                // the wordmark sit high on the screen instead of being
+                // pushed to the middle. Stacking each standing onto two
+                // lines made the block below taller, and a centred
+                // layout answered that by squeezing the buttons; this
+                // spends the screen's slack at the top, where there is
+                // nothing to lose.
+                Spacer(minLength: 0)
+                    .frame(maxHeight: 28)
 
                 // Hero medallion — gold coin with a shell engraved on it.
-                ShellMedallion(size: 100)
+                ShellMedallion(size: 84)
                     .shadow(color: Color.gold.opacity(0.45), radius: 22, x: 0, y: 0)
                     .shadow(color: Color.treasureInk.opacity(0.22), radius: 0, x: 0, y: 6)
                     .opacity(logoVisible ? 1 : 0)
@@ -92,7 +100,7 @@ struct SplashView: View {
                 // Uniform ink, no accent letter; tracking is light so the
                 // two words read as one wordmark.
                 Text("Shell Yes")
-                    .font(.custom("Optima", size: 64).weight(.semibold))
+                    .font(.custom("Optima", size: 54).weight(.semibold))
                     .tracking(1)
                     .foregroundStyle(Color.ink)
                     .opacity(logoVisible ? 1 : 0)
@@ -119,7 +127,12 @@ struct SplashView: View {
                     // it. Tapping the rank opens the board it came
                     // from, so the line is the shortest route to the
                     // thing it talks about.
-                    VStack(spacing: 4) {
+                    // Wider than the 3pt inside a standing, and that
+                    // difference is the whole point: a title and its
+                    // board phrase have to group more tightly than one
+                    // standing does to the next, or the sublines read
+                    // as a single run of small print.
+                    VStack(spacing: 13) {
                         if let name = GameCenter.shared.playerFirstName {
                             Text("Aloha, \(name)")
                                 .font(.avenir(15, weight: .demiBold, italic: true))
@@ -168,6 +181,12 @@ struct SplashView: View {
                         }
                     }
                     .frame(maxWidth: 280)
+                    // On top of the stack's own 18pt. The badges are
+                    // about the player and the buttons are about what
+                    // to do next; without a wider gap than the one
+                    // between the buttons themselves, the bottom badge
+                    // reads as the first item in the menu.
+                    .padding(.bottom, 16)
 
                     NavigationLink(value: Route.game) {
                         Text("New Game")
@@ -370,6 +389,85 @@ private struct StandingLine: View {
     /// both marks hard to see.
     private var markColor: Color { Color.gold }
 
+    /// The capsule behind a crowned title, and nothing at all behind a
+    /// plain rank. It wraps the title alone now rather than the title
+    /// plus its board phrase, which is what makes it read as a badge.
+    @ViewBuilder
+    private var pill: some View {
+        if standing.isTop {
+            Capsule()
+                .fill(Color.coinGoldLight.opacity(
+                    isKahuna ? (glowing ? 0.44 : 0.28) : (glowing ? 0.30 : 0.18)
+                ))
+                .overlay(
+                    Capsule()
+                        .strokeBorder(
+                            Color.gold.opacity(glowing ? 0.75 : 0.4),
+                            lineWidth: isKahuna ? 1.5 : 1
+                        )
+                )
+                // The halo the pill casts on the sand behind it. Two
+                // shadows: a tight one for definition, a wide one that
+                // does the breathing.
+                .shadow(
+                    color: Color.gold.opacity(glowing ? (isKahuna ? 0.6 : 0.45) : 0.12),
+                    radius: glowing ? (isKahuna ? 24 : 18) : 8,
+                    x: 0, y: 0
+                )
+                .shadow(color: Color.pearlGlow.opacity(glowing ? 0.5 : 0.2), radius: 4, x: 0, y: 0)
+        }
+    }
+
+    /// The claim itself. Crowned standings get their title flanked by
+    /// a mark on each side — symmetrical, so it reads as a badge and
+    /// not as a sentence that happens to start with an icon. A plain
+    /// standing is just its rank.
+    @ViewBuilder
+    private var titleRow: some View {
+        if standing.isTop {
+            HStack(spacing: isKahuna ? 4 : 7) {
+                mark(isKahuna ? "laurel.leading" : "crown.fill")
+
+                Text(standing.crownTitle ?? "")
+                    // Both titles at one size. The tier is carried by
+                    // the marks around the words, not by the words
+                    // being bigger.
+                    .font(.avenir(13, weight: .demiBold))
+                    .tracking(2)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.ink)
+                    // The title never shrinks. It is the whole
+                    // message, and a Big Kahuna smaller than a Top
+                    // Banana would say the opposite of what it means.
+                    .minimumScaleFactor(1)
+                    .layoutPriority(1)
+
+                // Both marks come in pairs now. A single crown made
+                // the pill lopsided once the board phrase moved out
+                // from beside it and the capsule closed up around the
+                // title alone.
+                mark(isKahuna ? "laurel.trailing" : "crown.fill")
+            }
+        } else {
+            Text(standing.summary)
+                .font(.avenir(12, weight: .demiBold, italic: true))
+                .tracking(1.5)
+                .foregroundStyle(Color.ink.opacity(0.6))
+                .monospacedDigit()
+        }
+    }
+
+    /// Which board the claim is about: "easy · this week", "easy · all
+    /// time". Inside the capsule on a crowned standing, so it is a
+    /// little darker there than it would be out on the sand — it has
+    /// gold behind it rather than open background.
+    private var contextText: some View {
+        Text(standing.contextLine)
+            .font(.avenir(13, weight: .medium, italic: true))
+            .tracking(1)
+            .foregroundStyle(Color.ink.opacity(standing.isTop ? 0.62 : 0.45))
+    }
+
     /// One mark, sized to its tier. The crown for a week, a palm for
     /// all time.
     private func mark(_ name: String) -> some View {
@@ -384,84 +482,43 @@ private struct StandingLine: View {
     }
 
     var body: some View {
-        HStack(spacing: isKahuna ? 4 : 6) {
+        // Two lines, centred: the claim, then the board it applies to.
+        // Previously both ran along one row, which made a crowned
+        // standing as wide as the sentence describing it and left the
+        // stack reading as a list of ragged strips.
+        //
+        // On a crowned standing both lines live inside the capsule, so
+        // the badge is the whole claim — the title and the board it is
+        // a claim about — rather than a title with a caption loose
+        // underneath it.
+        Group {
             if standing.isTop {
-                mark(isKahuna ? "laurel.leading" : "crown.fill")
-
-                Text(standing.crownTitle ?? "")
-                    // Both titles at one size. The tier is carried by
-                    // the marks around the words, not by the words
-                    // being bigger.
-                    .font(.avenir(13, weight: .demiBold))
-                    .tracking(2)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Color.ink)
-                    // The title never shrinks. It is the whole message,
-                    // and a Big Kahuna smaller than a Top Banana would
-                    // say the opposite of what it means. The board
-                    // phrase after it is what gives way instead.
-                    .minimumScaleFactor(1)
-                    .layoutPriority(1)
-
-                // Palms come in pairs; a crown does not.
-                if isKahuna { mark("laurel.trailing") }
-
-                Text(standing.boardPhrase)
-                    .font(.avenir(12, weight: .medium, italic: true))
-                    .tracking(1)
-                    .foregroundStyle(Color.ink.opacity(0.55))
+                VStack(spacing: 1) {
+                    titleRow
+                        // One height for both crowned tiers, so the two
+                        // pills are the same object at different
+                        // brightness rather than two sizes of badge.
+                        // The palms are taller than the crown and would
+                        // otherwise stretch their row.
+                        .frame(height: 18)
+                    contextText
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 18)
+                .background { pill }
             } else {
-                Text(standing.summary)
-                    .font(.avenir(12, weight: .demiBold, italic: true))
-                    .tracking(1.5)
-                    .foregroundStyle(Color.ink.opacity(0.6))
-                    .monospacedDigit()
-
-                // A tilde, not a middot: on a beach the separator may
-                // as well be a wave.
-                Text("~ \(standing.boardPhrase)")
-                    .font(.avenir(12, weight: .medium, italic: true))
-                    .tracking(1.5)
-                    .foregroundStyle(Color.ink.opacity(0.45))
+                VStack(spacing: 3) {
+                    titleRow
+                    contextText
+                }
             }
         }
-        // One height for both crowned tiers, so the two pills are the
-        // same object at different brightness rather than two sizes of
-        // badge. The palms are taller than the crown and would
-        // otherwise stretch their row.
-        .frame(height: standing.isTop ? 18 : nil)
         .lineLimit(1)
-        // Longest case is "biggest keep, this week" next to a
-        // four-digit total. Shrinking a little beats wrapping, and the
-        // floor is high enough that it never looks like a different
-        // type size.
+        // Longest case is "biggest keep · this week" inside a capsule.
+        // Shrinking a little beats wrapping, and the floor is high
+        // enough that it never looks like a different type size.
         .minimumScaleFactor(0.75)
-        .padding(.vertical, standing.isTop ? 7 : 0)
-        .padding(.horizontal, standing.isTop ? 14 : 0)
-        .background {
-            if standing.isTop {
-                Capsule()
-                    .fill(Color.coinGoldLight.opacity(
-                        isKahuna ? (glowing ? 0.44 : 0.28) : (glowing ? 0.30 : 0.18)
-                    ))
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(
-                                Color.gold.opacity(glowing ? 0.75 : 0.4),
-                                lineWidth: isKahuna ? 1.5 : 1
-                            )
-                    )
-                    // The halo the pill casts on the sand behind it.
-                    // Two shadows: a tight one for definition, a wide
-                    // one that does the breathing.
-                    .shadow(
-                        color: Color.gold.opacity(glowing ? (isKahuna ? 0.6 : 0.45) : 0.12),
-                        radius: glowing ? (isKahuna ? 24 : 18) : 8,
-                        x: 0, y: 0
-                    )
-                    .shadow(color: Color.pearlGlow.opacity(glowing ? 0.5 : 0.2), radius: 4, x: 0, y: 0)
-            }
-        }
+        .frame(maxWidth: .infinity)
         // A breath, not a blink: three and a half seconds each way, and
         // the swell is small enough to notice only once the eye has
         // settled on it. Held still entirely when the player has asked
