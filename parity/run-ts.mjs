@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Reads one parity case as JSON from stdin, emits the trace to stdout.
 import { initialState, step } from '../src/engine.js';
+import { bustChance, expectedRollGain, keepOptions } from '../src/odds.js';
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -21,6 +22,28 @@ function actionFromDto(dto) {
   throw new Error(`unknown action type ${dto.type}`);
 }
 
+// Probabilities are compared as scaled integers. Each engine formats
+// doubles its own way in JSON, so nine decimal places of a fixed-point
+// integer is the only shape both can agree on byte for byte.
+const SCALE = 1e9;
+const fixed = (x) => Math.round(x * SCALE);
+
+function oddsFor(state) {
+  return {
+    bust: fixed(bustChance(state.pickedFaces.length, state.diceInHand)),
+    ev: fixed(expectedRollGain(state.pickedFaces, state.diceInHand)),
+    keeps: keepOptions(state).map((k) => ({
+      face: k.face,
+      count: k.count,
+      gain: k.gain,
+      diceLeft: k.diceLeft,
+      bust: fixed(k.bustChance),
+      ev: fixed(k.expectedRollGain),
+      pearl: k.securesPearl,
+    })),
+  };
+}
+
 const raw = await new Promise((resolve) => {
   let buf = '';
   process.stdin.setEncoding('utf8');
@@ -35,4 +58,4 @@ for (const dto of testCase.actions) {
   state = step(state, actionFromDto(dto), rng);
   states.push(state);
 }
-process.stdout.write(JSON.stringify({ states }));
+process.stdout.write(JSON.stringify({ states, odds: states.map(oddsFor) }));

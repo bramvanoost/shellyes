@@ -17,8 +17,57 @@ struct ParityCase: Codable {
     let actions: [ActionDTO]
 }
 
+struct ParityOdds: Codable {
+    struct Keep: Codable {
+        let face: Int
+        let count: Int
+        let gain: Int
+        let diceLeft: Int
+        let bust: Int
+        let ev: Int
+        let pearl: Bool
+    }
+    let bust: Int
+    let ev: Int
+    let keeps: [Keep]
+}
+
 struct ParityTrace: Codable {
     let states: [State]
+    let odds: [ParityOdds]
+}
+
+/// Probabilities are compared as scaled integers. Each engine formats
+/// doubles its own way in JSON, so nine decimal places of a fixed-point
+/// integer is the only shape both can agree on byte for byte.
+let oddsScale = 1_000_000_000.0
+
+func fixed(_ x: Double) -> Int {
+    Int((x * oddsScale).rounded())
+}
+
+func oddsFor(_ state: State) -> ParityOdds {
+    ParityOdds(
+        bust: fixed(bustChance(
+            pickedCount: state.pickedFaces.count,
+            diceInHand: state.diceInHand
+        )),
+        ev: fixed(expectedRollGain(
+            pickedFaces: state.pickedFaces,
+            diceInHand: state.diceInHand
+        )),
+        keeps: keepOptions(state).map { k in
+            ParityOdds.Keep(
+                face: k.face.rawValue,
+                count: k.count,
+                gain: k.gain,
+                diceLeft: k.diceLeft,
+                bust: fixed(k.bustChance),
+                ev: fixed(k.expectedRollGain),
+                pearl: k.securesPearl
+            )
+        }
+    )
 }
 
 func actionFrom(_ dto: ParityCase.ActionDTO) -> Action {
@@ -73,7 +122,9 @@ for dto in testCase.actions {
 }
 
 do {
-    let out = try JSONEncoder().encode(ParityTrace(states: trace))
+    let out = try JSONEncoder().encode(
+        ParityTrace(states: trace, odds: trace.map(oddsFor))
+    )
     FileHandle.standardOutput.write(out)
 } catch {
     FileHandle.standardError.write(Data("encode failed: \(error)\n".utf8))

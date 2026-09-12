@@ -9,6 +9,7 @@ A push-your-luck dice game. Collect coins, bank them as tiles, steal rivals' til
 ## Architecture (do NOT violate)
 
 - `src/engine.ts` is PURE: `(state, action, rng) => newState`. No I/O, no rendering, no `Date.now`/`Math.random` inside, all randomness via the injected `rng`. This is what keeps multiplayer + mobile a port, not a rewrite.
+- `src/odds.ts` is PURE and depends only on engine types. Exact probabilities for explanation mode (bust chance, expected value of a roll, per-keep comparison). Mirrored in `ios/ShellYesEngine/Sources/ShellYesEngine/Odds.swift`, and the parity harness compares both engines' odds alongside their state traces — change one, change both.
 - `src/ai.ts` depends ONLY on engine. Decides PICK + STOP/ROLL. Difficulty via a single `discipline` knob (0 = greedy, 1 = cautious). No I/O.
 - `src/cli.ts` is a SWAPPABLE renderer (ANSI/terminal). A future web/mobile shell imports the SAME engine + ai. Never put game rules in the renderer.
 - Dice rolls are the only randomness and MUST flow through injected `rng` so a server can own them (fair, cheat-proof) in multiplayer.
@@ -30,7 +31,8 @@ A push-your-luck dice game. Collect coins, bank them as tiles, steal rivals' til
 
 - `npm test` green.
 - Regression: 200-game AI-vs-AI sim terminates cleanly AND higher discipline beats lower discipline over the sample (proves AI tiers aren't cosmetic).
-- No `Math.random`/`Date` references inside `engine.ts` or `ai.ts`.
+- No `Math.random`/`Date` references inside `engine.ts`, `ai.ts` or `odds.ts`.
+- `node parity/diff.mjs` green (needs `swift build --package-path ios/ShellYesEngine --product shellyes-parity` first).
 
 ## Non-obvious decisions (read before relitigating)
 

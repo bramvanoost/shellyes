@@ -3,6 +3,12 @@
 Asserts byte-equivalent state traces between the TypeScript engine
 (`src/engine.ts`) and the Swift engine (`ios/ShellYesEngine`).
 
+Two tracks are compared per case: `states`, the trace itself, and
+`odds`, the explanation-mode probabilities read off each state
+(`src/odds.ts` / `Odds.swift`). Probabilities travel as integers scaled
+by 1e9, because the two runtimes format doubles differently in JSON and
+only a fixed-point integer compares byte for byte.
+
 ## Run
 
 From repo root:

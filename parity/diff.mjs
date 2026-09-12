@@ -43,27 +43,38 @@ function canon(obj) {
   return obj;
 }
 
+// Each runner emits `states` and the `odds` read off each of them.
+// Both are compared: a state trace can agree while the probabilities
+// explanation mode quotes drift apart, and that divergence would only
+// ever show up on a player's screen.
+const TRACKS = ['states', 'odds'];
+
 let failed = 0;
 for (const c of cases) {
-  const ts = canon(runTs(c).states);
-  const sw = canon(runSwift(c).states);
-  const tsStr = JSON.stringify(ts);
-  const swStr = JSON.stringify(sw);
-  if (tsStr === swStr) {
+  const ts = runTs(c);
+  const sw = runSwift(c);
+  const divergence = TRACKS.map((track) => {
+    const a = canon(ts[track] ?? []);
+    const b = canon(sw[track] ?? []);
+    if (JSON.stringify(a) === JSON.stringify(b)) return null;
+    // Find first divergent index for a useful error.
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = JSON.stringify(a[i]);
+      const y = JSON.stringify(b[i]);
+      if (x !== y) return { track, index: i, ts: x, swift: y };
+    }
+    return { track, index: -1, ts: '(length)', swift: '(length)' };
+  }).filter(Boolean);
+
+  if (divergence.length === 0) {
     console.log(`OK   ${c.name}`);
   } else {
     failed++;
     console.error(`FAIL ${c.name}`);
-    // Find first divergent state index for a useful error.
-    for (let i = 0; i < Math.max(ts.length, sw.length); i++) {
-      const a = JSON.stringify(ts[i]);
-      const b = JSON.stringify(sw[i]);
-      if (a !== b) {
-        console.error(`  diverge at state[${i}]:`);
-        console.error(`    ts:    ${a}`);
-        console.error(`    swift: ${b}`);
-        break;
-      }
+    for (const d of divergence) {
+      console.error(`  diverge at ${d.track}[${d.index}]:`);
+      console.error(`    ts:    ${d.ts}`);
+      console.error(`    swift: ${d.swift}`);
     }
   }
 }
