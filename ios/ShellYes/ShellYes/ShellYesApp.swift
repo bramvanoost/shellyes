@@ -90,6 +90,15 @@ struct ShellYesApp: App {
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
+                    // Audio recovery runs BEFORE the telemetry debounce
+                    // below. Interruptions (calls, Siri) and the screen
+                    // locking mid-game leave the session deactivated and
+                    // our players paused, and a lock/unlock is exactly
+                    // the kind of transition that trips the 2s bounce
+                    // guard — so restoring sound behind that `return`
+                    // meant sound never came back.
+                    AudioPolicy.shared.configureSession()
+                    AudioPolicy.shared.refresh()
                     let now = Date()
                     if let start = sessionStart, now.timeIntervalSince(start) < 2 {
                         // Bounced active — same session, drop the
@@ -97,10 +106,6 @@ struct ShellYesApp: App {
                         return
                     }
                     sessionStart = now
-                    // Interruptions (calls, Siri) and backgrounding can
-                    // leave our session deactivated; re-assert it so
-                    // volume buttons keep driving media volume.
-                    AudioPolicy.shared.configureSession()
                     Telemetry.shared.track("app_opened")
                     // One-time catch-up for players who had a history
                     // before Game Center existed. No-ops if unsigned or

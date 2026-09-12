@@ -49,6 +49,20 @@ final class AudioPolicy {
         apply()
     }
 
+    /// Re-asserts the current policy without anything having changed.
+    ///
+    /// Needed after the app returns from the background or from an
+    /// audio interruption (a call, Siri, or the screen simply locking
+    /// during a game). iOS pauses our `AVAudioPlayer` and deactivates
+    /// the session; reactivating the session is not enough, because
+    /// nothing tells the paused player to resume. `apply()` routes
+    /// back into `HomeAudio.startIfNeeded()`, which plays a player
+    /// that exists but is stopped. Without this the music never comes
+    /// back for the rest of the session.
+    func refresh() {
+        apply()
+    }
+
     /// SFX (rolls, picks, banks, busts) are silent only when fully muted.
     var sfxEnabled: Bool { soundMode != .muted }
 
