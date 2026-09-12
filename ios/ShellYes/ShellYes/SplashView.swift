@@ -12,6 +12,9 @@ struct SplashView: View {
     @SwiftUI.State private var showExplainer: Bool = false
     @SwiftUI.State private var gameCenter = GameCenterEntry()
 
+    /// The card a tapped crown opens, or nil when no card is up.
+    @SwiftUI.State private var shareSubject: ShareCardSubject?
+
     #if DEBUG
     /// Set from the ladybug menu, so the splash can be looked at with
     /// the How to Play button out of the way — the one row on this
@@ -42,6 +45,32 @@ struct SplashView: View {
     private var sfxCreditAttributed: AttributedString {
         let raw = "UI sounds by [cadecomposer](https://github.com/cadecomposer)."
         return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
+    }
+
+    /// What tapping a standing does.
+    ///
+    /// A held number one opens its share card, because that is the one
+    /// rank worth showing anybody and the moment the player is proudest
+    /// is the moment to offer it. Everything else goes straight to the
+    /// board, which is the only useful thing to do with a twelfth
+    /// place. The Leaderboards button below is untouched either way, so
+    /// the direct route to Apple's screen always exists.
+    private func tap(_ standing: BoardStanding) {
+        guard let subject = ShareCardSubject.from(
+            standing: standing,
+            name: GameCenter.shared.playerFirstName
+        ) else {
+            gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+            return
+        }
+        Telemetry.shared.track("share_card_opened", props: [
+            "board": standing.board?.shortKey
+                ?? standing.weeklyBoard?.shortKey
+                ?? "unknown",
+            "period": standing.period.rawValue,
+            "tier": standing.isKahuna ? "big_kahuna" : "top_banana",
+        ])
+        shareSubject = subject
     }
 
     var body: some View {
@@ -114,7 +143,7 @@ struct SplashView: View {
                         // account and is promoted below.
                         ForEach(standings.weekly) { standing in
                             Button {
-                                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                                tap(standing)
                             } label: {
                                 StandingLine(
                                     standing: standing,
@@ -127,7 +156,7 @@ struct SplashView: View {
 
                         if let crown = standings.allTimeCrown {
                             Button {
-                                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                                tap(crown)
                             } label: {
                                 StandingLine(
                                     standing: crown,
@@ -236,10 +265,31 @@ struct SplashView: View {
         .sheet(isPresented: $showExplainer) {
             ExplainerView(from: "home")
         }
+        .sheet(item: $shareSubject) { subject in
+            ShareCardSheet(subject: subject) {
+                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+            }
+        }
         .gameCenterEntry(gameCenter)
         .task {
             #if DEBUG
             IconExporter.exportIfNeeded()
+            // Capture support: a name the simulator has no account to
+            // supply, and the share card opened over the splash.
+            if let seeded = ScreenshotMode.playerName {
+                GameCenter.shared.debugSetPlayerName(seeded)
+            }
+            if let seed = ScreenshotMode.shareCardSeed {
+                let crowned = seed == .weekly
+                    ? standings.weekly.first(where: \.isTop)
+                    : standings.allTimeCrown
+                if let crowned {
+                    shareSubject = ShareCardSubject.from(
+                        standing: crowned,
+                        name: GameCenter.shared.playerFirstName
+                    )
+                }
+            }
             #endif
             // Ranks refresh every time the splash appears, which is
             // also every time a finished game lands back here — so the
@@ -309,8 +359,10 @@ private struct StandingLine: View {
     private var crownGlow: Double { glowing ? 0.75 : 0.35 }
 
     /// Rank one on a board that never resets. Rarer than the weekly
-    /// crown by definition, and dressed accordingly.
-    private var isKahuna: Bool { standing.isTop && !standing.isWeekly }
+    /// crown by definition, and dressed accordingly. The rule lives on
+    /// the standing, so the share card crowns exactly what this line
+    /// crowns.
+    private var isKahuna: Bool { standing.isKahuna }
 
     /// Gold at full strength, not the pale coin cream. `coinGoldLight`
     /// is a highlight colour meant to sit on top of something darker;
@@ -336,7 +388,7 @@ private struct StandingLine: View {
             if standing.isTop {
                 mark(isKahuna ? "laurel.leading" : "crown.fill")
 
-                Text(isKahuna ? "Big Kahuna" : "Top Banana")
+                Text(standing.crownTitle ?? "")
                     // Both titles at one size. The tier is carried by
                     // the marks around the words, not by the words
                     // being bigger.
@@ -428,7 +480,7 @@ private struct StandingLine: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             standing.isTop
-                ? "Top Banana \(standing.boardPhrase)"
+                ? "\(standing.crownTitle ?? "") \(standing.boardPhrase)"
                 : "\(standing.summary) \(standing.boardPhrase)"
         )
     }

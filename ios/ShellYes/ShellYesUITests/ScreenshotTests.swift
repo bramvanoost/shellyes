@@ -125,6 +125,34 @@ final class ScreenshotTests: XCTestCase {
         shoot("09-splash-top-banana")
     }
 
+    /// The share card a held number one opens. Needs three things the
+    /// simulator can't supply: a rank, a name, and the sheet itself.
+    func testShareCard() throws {
+        let app = launch(extra: [
+            "-standings", "top",
+            "-playerName", "Kai Moana",
+            "-shareCard", "weekly",
+        ])
+        let share = button(app, "share")
+        XCTAssertTrue(share.waitForExistence(timeout: 15), "share card never opened")
+        settle(1.0)
+        shoot("11-share-card")
+    }
+
+    /// The rarer card: palms instead of a crown, and a longer title to
+    /// fit between them.
+    func testShareCardBigKahuna() throws {
+        let app = launch(extra: [
+            "-standings", "top",
+            "-playerName", "Kai Moana",
+            "-shareCard", "allTime",
+        ])
+        let share = button(app, "share")
+        XCTAssertTrue(share.waitForExistence(timeout: 15), "share card never opened")
+        settle(1.0)
+        shoot("12-share-card-kahuna")
+    }
+
     /// The one-time offer to leave Easy, on the tally where it appears.
     /// `-forceDifficultyNudge` stands in for the ten finished games
     /// its real gate wants.

@@ -49,6 +49,35 @@ struct BoardStanding: Codable, Equatable, Identifiable {
 
     var isTop: Bool { rank == 1 }
 
+    /// Rank one on a board that never resets. Rarer than the weekly
+    /// crown by definition — nobody who has ever played has done
+    /// better — and named differently everywhere it appears.
+    var isKahuna: Bool { isTop && !isWeekly }
+
+    /// What a held number one is called. Nil when there isn't one, so
+    /// a caller can't accidentally crown a twelfth place.
+    var crownTitle: String? {
+        guard isTop else { return nil }
+        return isKahuna ? "Big Kahuna" : "Top Banana"
+    }
+
+    /// What this board counts, or nil for a board this build does not
+    /// know about.
+    var kind: BoardKind? { board?.kind ?? weeklyBoard?.kind }
+
+    /// The score in words: "96 coins", "5 wins in a row", "8 coins in
+    /// one keep". A bare number means nothing away from the board it
+    /// came from, and the share card is the one place the number is
+    /// read by someone who has never seen that board.
+    var scorePhrase: String? {
+        switch kind {
+        case .score:  return "\(score) coins"
+        case .streak: return score == 1 ? "1 win in a row" : "\(score) wins in a row"
+        case .keep:   return "\(score) coins in one keep"
+        case nil:     return nil
+        }
+    }
+
     /// "1st", "12th", "23rd" — localized, because English's ordinal
     /// rules are not every language's.
     var ordinal: String {

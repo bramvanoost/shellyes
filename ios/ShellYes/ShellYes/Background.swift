@@ -4,6 +4,12 @@ import SwiftUI
 /// dune, and a couple of palm silhouettes. Used by every screen so all the
 /// foreground chrome floats on the same atmosphere.
 struct Background: View {
+    /// How much of the bottom edge the beach occupies. The default is
+    /// the phone screen's, where the scene has a whole display to sit
+    /// in; a small fixed canvas like the share card needs the horizon
+    /// pushed further down or the dune climbs into the type.
+    var groundInset: CGFloat = 130
+
     var body: some View {
         ZStack {
             // Sky gradient
@@ -21,7 +27,7 @@ struct Background: View {
             // Distant beach silhouette anchored near the bottom edge so the
             // top 2/3 of the screen stays clear for UI.
             GeometryReader { geo in
-                BeachScene(horizonY: geo.size.height - 130)
+                BeachScene(horizonY: geo.size.height - groundInset)
                     .mask(
                         LinearGradient(
                             stops: [

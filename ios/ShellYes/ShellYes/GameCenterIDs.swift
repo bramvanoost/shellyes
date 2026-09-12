@@ -7,6 +7,19 @@ import Foundation
 /// so renaming a case here after release orphans the board. Change the
 /// display name in App Store Connect instead — it is not in the app.
 
+/// What a board measures, independent of the window it measures over.
+/// Exists so anything that has to put a score into words — the share
+/// card, for one — can ask the board what its number means rather than
+/// matching on ten cases across two enums.
+enum BoardKind {
+    /// Coins banked in a game, or summed over a week's best three.
+    case score
+    /// Games won in a row.
+    case streak
+    /// The largest single bank.
+    case keep
+}
+
 /// The five boards, grouped in App Store Connect as two sets plus one
 /// loose board. Best score is per difficulty because a harder AI takes
 /// more shells, so the same player scores lower on Hard.
@@ -51,6 +64,15 @@ enum Leaderboard: String, CaseIterable {
         case .scoreHard:   return "hard, all time"
         case .bestStreak:  return "best streak, all time"
         case .biggestKeep: return "biggest keep, all time"
+        }
+    }
+
+    /// What this board counts. See `BoardKind`.
+    var kind: BoardKind {
+        switch self {
+        case .scoreEasy, .scoreNormal, .scoreHard: return .score
+        case .bestStreak:  return .streak
+        case .biggestKeep: return .keep
         }
     }
 
@@ -165,6 +187,16 @@ enum WeeklyLeaderboard: String, CaseIterable {
         case .scoreHard:   return "hard, this week"
         case .bestStreak:  return "best streak, this week"
         case .biggestKeep: return "biggest keep, this week"
+        }
+    }
+
+    /// What this board counts. Same five contests as the all-time
+    /// boards, so the same five answers.
+    var kind: BoardKind {
+        switch self {
+        case .scoreEasy, .scoreNormal, .scoreHard: return .score
+        case .bestStreak:  return .streak
+        case .biggestKeep: return .keep
         }
     }
 

@@ -82,6 +82,50 @@ struct WeeklyBests: Codable, Equatable {
         return String(format: "%04d-W%02d", year, week)
     }
 
+    /// The week an id names, in words: "8–14 Sep", or "29 Sep – 5 Oct"
+    /// when it straddles two months.
+    ///
+    /// Only the share card needs this. A rank shown inside the app can
+    /// say "this week" because the player is reading it this week; a
+    /// card that leaves the phone is looked at later, by someone else,
+    /// and "this week" would be a claim about whatever week they happen
+    /// to open it in. The dates make it true forever.
+    ///
+    /// UTC, like `weekID` itself, because the boards restart on UTC and
+    /// the label has to name the same seven days Apple counted.
+    /// `DateIntervalFormatter` does the joining, so a locale that
+    /// writes the month first gets "Sep 8 – 14" rather than a range
+    /// assembled in English word order.
+    static func weekLabel(for weekID: String, now: Date = Date()) -> String? {
+        let parts = weekID.components(separatedBy: "-W")
+        guard parts.count == 2,
+              let year = Int(parts[0]),
+              let week = Int(parts[1]) else { return nil }
+
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+        var components = DateComponents()
+        components.yearForWeekOfYear = year
+        components.weekOfYear = week
+        components.weekday = calendar.firstWeekday
+        guard let start = calendar.date(from: components),
+              let end = calendar.date(byAdding: .day, value: 6, to: start) else { return nil }
+
+        // The year rides along only when the card is about some other
+        // year than the one it is made in — which is to say almost
+        // never, and exactly when it matters.
+        let currentYear = calendar
+            .dateComponents([.yearForWeekOfYear], from: now)
+            .yearForWeekOfYear
+        let template = (currentYear == year) ? "dMMM" : "dMMMyyyy"
+
+        let formatter = DateIntervalFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateTemplate = template
+        return formatter.string(from: start, to: end)
+    }
+
     /// This week's numbers, or a fresh empty week if `self` belongs to
     /// an older one.
     ///

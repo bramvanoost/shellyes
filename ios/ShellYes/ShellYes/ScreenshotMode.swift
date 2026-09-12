@@ -42,6 +42,31 @@ enum ScreenshotMode {
         ProcessInfo.processInfo.arguments.contains("-forceDifficultyNudge")
     }
 
+    /// Which share card to open over the splash. Pair it with
+    /// `-standings top`, the only state that has a card to show, and
+    /// `-playerName` so the card carries one.
+    enum ShareCardSeed: String {
+        /// The weekly crown: crown mark, "Top Banana".
+        case weekly
+        /// The all-time one: palms, "Big Kahuna".
+        case allTime
+    }
+
+    static var shareCardSeed: ShareCardSeed? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-shareCard"), i + 1 < args.count else { return nil }
+        return ShareCardSeed(rawValue: args[i + 1])
+    }
+
+    /// A name for the greeting and the share card. The simulator has
+    /// no Game Center account to supply one, and a card with a blank
+    /// where the name goes is not the card players will make.
+    static var playerName: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-playerName"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
     static var standingsSeed: StandingsSeed? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-standings"), i + 1 < args.count else { return nil }
