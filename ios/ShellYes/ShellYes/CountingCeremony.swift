@@ -191,18 +191,20 @@ struct CountingCeremony: View {
                     }
                 }
 
-                // Center-aligned with a small upward nudge: italic digits
-                // have their visual mass above center, so a true vertical
-                // center alignment makes the pearl sit too low. The -3pt
-                // nudge brings the pearl up to ride the digit's cap line.
-                HStack(alignment: .center, spacing: 6) {
+                // Center-aligned with a hairline upward nudge: italic
+                // digits have their visual mass above center. -3pt rode
+                // the cap line, which read as the pearl hanging off the
+                // top of the number; -1pt sits it in the middle of the
+                // digit's body. The 11pt gap keeps the pearl from
+                // crowding the italic's overhang.
+                HStack(alignment: .center, spacing: 11) {
                     Text("\(displayedTotal)")
                         .font(.avenir(34, weight: .demiBold))
                         .foregroundStyle(Color.ink)
                         .monospacedDigit()
                     pearlGlyph(size: 24)
                         .shadow(color: Color.pearlEdge.opacity(0.35), radius: 0, x: 0, y: 1)
-                        .offset(y: -3)
+                        .offset(y: -1)
                 }
                 .opacity(isRevealed ? 1.0 : 0.25)
             }
