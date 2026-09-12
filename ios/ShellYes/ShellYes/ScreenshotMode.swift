@@ -25,6 +25,22 @@ enum ScreenshotMode {
         case tally
     }
 
+    /// A leaderboard standing to draw on the splash. The simulator
+    /// has no Game Center account, so the only way to capture the
+    /// rank line — or the Top Banana crown — is to hand it one.
+    enum StandingsSeed: String {
+        /// Mid-table: the quiet "12th of 340" line.
+        case mid
+        /// Rank one, crown and all.
+        case top
+    }
+
+    static var standingsSeed: StandingsSeed? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-standings"), i + 1 < args.count else { return nil }
+        return StandingsSeed(rawValue: args[i + 1])
+    }
+
     static var seed: Seed? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-seed"), i + 1 < args.count else { return nil }

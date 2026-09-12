@@ -19,6 +19,26 @@ final class GameCenter {
 
     private(set) var isAuthenticated = false
 
+    /// What to call the player, or nil when we have no right to call
+    /// them anything. `displayName` rather than `alias` because Apple
+    /// decides there what is safe to show — the real name only when
+    /// the player has allowed it, the gamertag otherwise.
+    ///
+    /// Cached, so the splash can greet on its first frame instead of
+    /// a beat later when GameKit answers. A name that turns out to be
+    /// stale is corrected within the second; a greeting that pops in
+    /// after the screen has settled is the thing worth avoiding.
+    private(set) var playerName: String?
+
+    /// The part of `playerName` a greeting uses: everything before the
+    /// first space. "Bram van Oost" greets as Bram, and a one-word
+    /// gamertag greets as itself.
+    var playerFirstName: String? {
+        guard let first = playerName?.split(separator: " ").first else { return nil }
+        let trimmed = String(first)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Apple hands us a sign-in view controller when the player isn't
     /// signed in yet. We hold it rather than presenting it, and only
     /// show it if they ask for Game Center themselves.
@@ -35,6 +55,7 @@ final class GameCenter {
         /// re-fire `achievement_unlocked` for "First Shell" and the
         /// number would mean nothing.
         static let reported = "gamecenter.reportedAchievements"
+        static let playerName = "gamecenter.playerName"
     }
 
     /// Last authentication outcome reported, so GameKit calling its
@@ -44,6 +65,7 @@ final class GameCenter {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        self.playerName = defaults.string(forKey: Key.playerName)
     }
 
     // MARK: - Authentication
@@ -60,6 +82,10 @@ final class GameCenter {
                     // Not signed in. Hold the sheet for later.
                     self.pendingSignIn = viewController
                     self.isAuthenticated = false
+                    // Signed out is the one case that clears the name:
+                    // greeting the last player by name on an account
+                    // that has since left is worse than not greeting.
+                    self.rememberPlayerName(nil)
                     self.trackAuth("not_signed_in")
                     return
                 }
@@ -73,10 +99,38 @@ final class GameCenter {
                 }
                 self.pendingSignIn = nil
                 self.isAuthenticated = GKLocalPlayer.local.isAuthenticated
+                // A failed auth leaves the cached name alone — no
+                // signal, no news about who they are. Only a confirmed
+                // sign-in rewrites it.
+                if self.isAuthenticated {
+                    self.rememberPlayerName(GKLocalPlayer.local.displayName)
+                }
                 self.trackAuth(self.isAuthenticated ? "authenticated" : "not_signed_in")
             }
         }
     }
+
+    /// Stores the name for this launch and the next. Never leaves the
+    /// device: it is not a telemetry property and never will be.
+    private func rememberPlayerName(_ name: String?) {
+        let cleaned = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (cleaned?.isEmpty == false) ? cleaned : nil
+        playerName = value
+        if let value {
+            defaults.set(value, forKey: Key.playerName)
+        } else {
+            defaults.removeObject(forKey: Key.playerName)
+        }
+    }
+
+    #if DEBUG
+    /// A name the simulator has no account to supply. Goes through the
+    /// same store as the real one, so the greeting is exercised by the
+    /// code that will run in a player's hand.
+    func debugSetPlayerName(_ name: String?) {
+        rememberPlayerName(name)
+    }
+    #endif
 
     /// Presents Apple's sign-in sheet if we're holding one. Returns
     /// false when there's nothing to present, which means either the
@@ -160,6 +214,63 @@ final class GameCenter {
                     extra: ["board": shortKey]
                 )
             }
+        }
+    }
+
+    // MARK: - Reading back
+
+    /// The local player's rank on every board they appear on.
+    ///
+    /// One `loadEntries` call per board, asked for the shortest
+    /// possible range: the entries themselves are thrown away and only
+    /// the local player's row and the board's total count are kept.
+    /// Boards are walked in `Leaderboard.allCases` order and asked one
+    /// at a time — five serial round trips on a screen that is already
+    /// idle, in exchange for a result whose order doesn't shuffle
+    /// between launches.
+    ///
+    /// Returns empty rather than throwing. A missing rank is a missing
+    /// nicety; it is never worth putting an error in front of someone
+    /// who opened a beach game.
+    func loadStandings(
+        for boardIDs: [String] = Leaderboard.allCases.map(\.rawValue),
+        period: StandingPeriod = .allTime
+    ) async -> [BoardStanding] {
+        guard isAuthenticated, !boardIDs.isEmpty else { return [] }
+        let order = boardIDs
+        do {
+            let boards = try await GKLeaderboard.loadLeaderboards(IDs: order)
+            var found: [BoardStanding] = []
+            for board in boards {
+                // Range is 1-based and must be non-empty, so ask for
+                // the single top entry. `loadEntries` returns the local
+                // player's own row separately, whatever their position.
+                let (localEntry, _, total) = try await board.loadEntries(
+                    for: .global,
+                    timeScope: .allTime,
+                    range: NSRange(location: 1, length: 1)
+                )
+                guard let localEntry else { continue }
+                found.append(
+                    BoardStanding(
+                        boardID: board.baseLeaderboardID,
+                        period: period,
+                        rank: localEntry.rank,
+                        total: total,
+                        score: localEntry.score
+                    )
+                )
+            }
+            return found.sorted {
+                (order.firstIndex(of: $0.boardID) ?? order.count)
+                    < (order.firstIndex(of: $1.boardID) ?? order.count)
+            }
+        } catch {
+            #if DEBUG
+            print("[GameCenter] rank load failed: \(error.localizedDescription)")
+            #endif
+            trackFailure("gamecenter_rank_failed", error: error)
+            return []
         }
     }
 

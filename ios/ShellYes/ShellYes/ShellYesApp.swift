@@ -5,6 +5,7 @@ struct ShellYesApp: App {
     @SwiftUI.State private var settings: SettingsStore
     @SwiftUI.State private var store: GameStore
     @SwiftUI.State private var stats: StatsStore
+    @SwiftUI.State private var standings: StandingsStore
     @SwiftUI.State private var path = NavigationPath()
     @Environment(\.scenePhase) private var scenePhase
     @SwiftUI.State private var sessionStart: Date?
@@ -14,6 +15,10 @@ struct ShellYesApp: App {
         _settings = .init(initialValue: s)
         _store = .init(initialValue: GameStore(settings: s))
         _stats = .init(initialValue: StatsStore())
+        // Last known ranks load from the cache here so the splash can
+        // draw the standing on its first frame; the live refresh
+        // happens when that screen appears.
+        _standings = .init(initialValue: StandingsStore())
         // Before any player exists, so SFX and music share one
         // `.playback` session that ignores the ringer switch.
         AudioPolicy.shared.configureSession()
@@ -29,7 +34,12 @@ struct ShellYesApp: App {
     var body: some Scene {
         WindowGroup {
             NavigationStack(path: $path) {
-                SplashView(store: store, settings: settings, stats: stats)
+                SplashView(
+                    store: store,
+                    settings: settings,
+                    stats: stats,
+                    standings: standings
+                )
                     .navigationDestination(for: Route.self) { route in
                         switch route {
                         case .game:

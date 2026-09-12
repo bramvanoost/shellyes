@@ -4,12 +4,30 @@ struct SplashView: View {
     let store: GameStore
     let settings: SettingsStore
     let stats: StatsStore
+    let standings: StandingsStore
 
     @SwiftUI.State private var logoVisible: Bool = false
     @SwiftUI.State private var actionsVisible: Bool = false
     @SwiftUI.State private var creditVisible: Bool = false
     @SwiftUI.State private var showExplainer: Bool = false
     @SwiftUI.State private var gameCenter = GameCenterEntry()
+
+    #if DEBUG
+    /// Set from the ladybug menu, so the splash can be looked at with
+    /// the How to Play button out of the way — the one row on this
+    /// screen that a returning player never needs.
+    @SwiftUI.State private var debugHidesHowToPlay = false
+    #endif
+
+    /// Always true in a shipped build; only the debug menu can say
+    /// otherwise.
+    private var showsHowToPlay: Bool {
+        #if DEBUG
+        return !debugHidesHowToPlay
+        #else
+        return true
+        #endif
+    }
 
     /// False until a game has been finished. It no longer decides
     /// whether the Game Center entries appear — they always do — only
@@ -34,12 +52,12 @@ struct SplashView: View {
                 Spacer()
 
                 // Hero medallion — gold coin with a shell engraved on it.
-                ShellMedallion(size: 124)
+                ShellMedallion(size: 100)
                     .shadow(color: Color.gold.opacity(0.45), radius: 22, x: 0, y: 0)
                     .shadow(color: Color.treasureInk.opacity(0.22), radius: 0, x: 0, y: 6)
                     .opacity(logoVisible ? 1 : 0)
                     .scaleEffect(logoVisible ? 1 : 0.85)
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 14)
 
                 // Wordmark — Optima at semibold for a humanist, beachy feel.
                 // Uniform ink, no accent letter; tracking is light so the
@@ -61,19 +79,83 @@ struct SplashView: View {
                     .opacity(logoVisible ? 1 : 0)
 
                 VStack(spacing: 18) {
+                    // The greeting and the rank are one block above New
+                    // Game, not tucked under the Leaderboards button: a
+                    // name and a rank are the two things on this screen
+                    // that are about the player rather than the game,
+                    // and they belong where the eye lands first.
+                    //
+                    // The greeting stands with or without a rank —
+                    // knowing someone's name is reason enough to use
+                    // it. Tapping the rank opens the board it came
+                    // from, so the line is the shortest route to the
+                    // thing it talks about.
+                    VStack(spacing: 4) {
+                        if let name = GameCenter.shared.playerFirstName {
+                            Text("Aloha, \(name)")
+                                .font(.avenir(15, weight: .demiBold, italic: true))
+                                .tracking(1)
+                                .foregroundStyle(Color.ink.opacity(0.7))
+                                .padding(.bottom, 2)
+                                .transition(.opacity)
+                        }
+
+                        // This week's boards, in board order rather
+                        // than best-first: an order a player learns
+                        // once and can then read without looking, and
+                        // one that doesn't reshuffle itself the week
+                        // they improve.
+                        //
+                        // All-time ranks are deliberately absent. They
+                        // are mostly a seniority queue — see
+                        // WEEKLY-BOARDS — and ten lines above New Game
+                        // would be absurd. The exception is a held
+                        // number one, which is the best thing about the
+                        // account and is promoted below.
+                        ForEach(standings.weekly) { standing in
+                            Button {
+                                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                            } label: {
+                                StandingLine(
+                                    standing: standing,
+                                    reducedMotion: settings.reducedMotion
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
+
+                        if let crown = standings.allTimeCrown {
+                            Button {
+                                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                            } label: {
+                                StandingLine(
+                                    standing: crown,
+                                    reducedMotion: settings.reducedMotion
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
+                    }
+                    .frame(maxWidth: 280)
+
                     NavigationLink(value: Route.game) {
                         Text("New Game")
                     }
                     .stampButton(primary: true, invite: true)
                     .frame(maxWidth: 280)
 
-                    Button {
-                        showExplainer = true
-                    } label: {
-                        OutlineLabel(title: "How to Play")
+                    if showsHowToPlay {
+                        Button {
+                            showExplainer = true
+                        } label: {
+                            OutlineLabel(title: "How to Play")
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: 280)
+                        .transition(.opacity)
                     }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: 280)
 
                     Button {
                         gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
@@ -97,9 +179,12 @@ struct SplashView: View {
                         }
                     }
                 }
+                .animation(.easeOut(duration: 0.4), value: standings.standings)
+                .animation(.easeOut(duration: 0.3), value: showsHowToPlay)
+                .animation(.easeOut(duration: 0.4), value: GameCenter.shared.playerName)
                 .opacity(actionsVisible ? 1 : 0)
                 .offset(y: actionsVisible ? 0 : 12)
-                .padding(.top, 36)
+                .padding(.top, 28)
 
                 Spacer()
 
@@ -137,6 +222,16 @@ struct SplashView: View {
             }
             .padding(.horizontal, 24)
         }
+        .overlay(alignment: .topTrailing) {
+            #if DEBUG
+            if !ScreenshotMode.isActive {
+                SplashDebugMenu(
+                    standings: standings,
+                    hidesHowToPlay: $debugHidesHowToPlay
+                )
+            }
+            #endif
+        }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExplainer) {
             ExplainerView(from: "home")
@@ -146,6 +241,10 @@ struct SplashView: View {
             #if DEBUG
             IconExporter.exportIfNeeded()
             #endif
+            // Ranks refresh every time the splash appears, which is
+            // also every time a finished game lands back here — so the
+            // score just submitted is the one being placed.
+            Task { await standings.refresh() }
             AudioPolicy.shared.setInGame(false)
             withAnimation(.easeOut(duration: 0.7)) {
                 logoVisible = true
@@ -183,6 +282,158 @@ private struct OutlineLabel: View {
     }
 }
 
+/// Where the player sits on one board. Three states, and the gap
+/// between them is the point.
+///
+/// A middling rank is the size of a credit line, because a rank in the
+/// middle of a board is a fact, not an achievement. Rank one this week
+/// is Top Banana, with a crown. Rank one *all time* is Big Kahuna, in
+/// palms — SF Symbols calls them laurels, but at this size and on this
+/// beach they read as palm fronds, which is the better joke.
+///
+/// The weekly crown is winnable by anyone who has a good week; the
+/// all-time one means nobody who has ever played has done better. The
+/// palms carry that by being wider and taller than the crown rather
+/// than by being a grander version of it.
+private struct StandingLine: View {
+    let standing: BoardStanding
+    let reducedMotion: Bool
+
+    /// Drives the Top Banana breath. One flag, flipped once, animated
+    /// forever — the glow and the scale read off the same phase so the
+    /// pill swells and brightens together rather than beating against
+    /// itself.
+    @SwiftUI.State private var glowing = false
+
+    /// The crown's own halo, brightest at the top of the breath.
+    private var crownGlow: Double { glowing ? 0.75 : 0.35 }
+
+    /// Rank one on a board that never resets. Rarer than the weekly
+    /// crown by definition, and dressed accordingly.
+    private var isKahuna: Bool { standing.isTop && !standing.isWeekly }
+
+    /// Gold at full strength, not the pale coin cream. `coinGoldLight`
+    /// is a highlight colour meant to sit on top of something darker;
+    /// alone on the sand it all but disappeared, which is what made
+    /// both marks hard to see.
+    private var markColor: Color { Color.gold }
+
+    /// One mark, sized to its tier. The crown for a week, a palm for
+    /// all time.
+    private func mark(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: isKahuna ? 17 : 15, weight: .medium))
+            .foregroundStyle(markColor)
+            .shadow(
+                color: Color.coinGoldLight.opacity(crownGlow),
+                radius: glowing ? 9 : 5,
+                x: 0, y: 0
+            )
+    }
+
+    var body: some View {
+        HStack(spacing: isKahuna ? 4 : 6) {
+            if standing.isTop {
+                mark(isKahuna ? "laurel.leading" : "crown.fill")
+
+                Text(isKahuna ? "Big Kahuna" : "Top Banana")
+                    // Both titles at one size. The tier is carried by
+                    // the marks around the words, not by the words
+                    // being bigger.
+                    .font(.avenir(13, weight: .demiBold))
+                    .tracking(2)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.ink)
+                    // The title never shrinks. It is the whole message,
+                    // and a Big Kahuna smaller than a Top Banana would
+                    // say the opposite of what it means. The board
+                    // phrase after it is what gives way instead.
+                    .minimumScaleFactor(1)
+                    .layoutPriority(1)
+
+                // Palms come in pairs; a crown does not.
+                if isKahuna { mark("laurel.trailing") }
+
+                Text(standing.boardPhrase)
+                    .font(.avenir(12, weight: .medium, italic: true))
+                    .tracking(1)
+                    .foregroundStyle(Color.ink.opacity(0.55))
+            } else {
+                Text(standing.summary)
+                    .font(.avenir(12, weight: .demiBold, italic: true))
+                    .tracking(1.5)
+                    .foregroundStyle(Color.ink.opacity(0.6))
+                    .monospacedDigit()
+
+                // A tilde, not a middot: on a beach the separator may
+                // as well be a wave.
+                Text("~ \(standing.boardPhrase)")
+                    .font(.avenir(12, weight: .medium, italic: true))
+                    .tracking(1.5)
+                    .foregroundStyle(Color.ink.opacity(0.45))
+            }
+        }
+        // One height for both crowned tiers, so the two pills are the
+        // same object at different brightness rather than two sizes of
+        // badge. The palms are taller than the crown and would
+        // otherwise stretch their row.
+        .frame(height: standing.isTop ? 18 : nil)
+        .lineLimit(1)
+        // Longest case is "biggest keep, this week" next to a
+        // four-digit total. Shrinking a little beats wrapping, and the
+        // floor is high enough that it never looks like a different
+        // type size.
+        .minimumScaleFactor(0.75)
+        .padding(.vertical, standing.isTop ? 7 : 0)
+        .padding(.horizontal, standing.isTop ? 14 : 0)
+        .background {
+            if standing.isTop {
+                Capsule()
+                    .fill(Color.coinGoldLight.opacity(
+                        isKahuna ? (glowing ? 0.44 : 0.28) : (glowing ? 0.30 : 0.18)
+                    ))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                Color.gold.opacity(glowing ? 0.75 : 0.4),
+                                lineWidth: isKahuna ? 1.5 : 1
+                            )
+                    )
+                    // The halo the pill casts on the sand behind it.
+                    // Two shadows: a tight one for definition, a wide
+                    // one that does the breathing.
+                    .shadow(
+                        color: Color.gold.opacity(glowing ? (isKahuna ? 0.6 : 0.45) : 0.12),
+                        radius: glowing ? (isKahuna ? 24 : 18) : 8,
+                        x: 0, y: 0
+                    )
+                    .shadow(color: Color.pearlGlow.opacity(glowing ? 0.5 : 0.2), radius: 4, x: 0, y: 0)
+            }
+        }
+        // A breath, not a blink: three and a half seconds each way, and
+        // the swell is small enough to notice only once the eye has
+        // settled on it. Held still entirely when the player has asked
+        // for less motion — the gold alone still marks rank one.
+        .scaleEffect(standing.isTop && glowing ? 1.035 : 1.0)
+        .animation(
+            reducedMotion || !standing.isTop
+                ? nil
+                : .easeInOut(duration: 3.5).repeatForever(autoreverses: true),
+            value: glowing
+        )
+        .onAppear {
+            guard standing.isTop, !reducedMotion else { return }
+            glowing = true
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            standing.isTop
+                ? "Top Banana \(standing.boardPhrase)"
+                : "\(standing.summary) \(standing.boardPhrase)"
+        )
+    }
+}
+
 /// The quietest tier on the splash: lowercase italic with a hairline
 /// icon, for the things a player goes looking for rather than lands on.
 private struct QuietLabel: View {
@@ -203,3 +454,57 @@ private struct QuietLabel: View {
         .padding(.horizontal, 14)
     }
 }
+
+#if DEBUG
+/// The splash's own ladybug. The standing line is the one piece of this
+/// screen a simulator can never produce on its own — there is no Game
+/// Center account behind it — so the ranks are handed in by hand.
+///
+/// Same corner and same icon as the in-game menu, and hidden by
+/// `-screenshotMode` for the same reason.
+private struct SplashDebugMenu: View {
+    let standings: StandingsStore
+    @Binding var hidesHowToPlay: Bool
+
+    var body: some View {
+        Menu {
+            Button("Standing: mid-table", systemImage: "list.number") {
+                withAnimation { standings.debugSeed(top: false) }
+            }
+            Button("Standing: Top Banana", systemImage: "crown.fill") {
+                withAnimation { standings.debugSeed(top: true) }
+            }
+            Button("Standing: none", systemImage: "xmark.circle") {
+                withAnimation { standings.debugClear() }
+            }
+            Divider()
+            Button("Name: Bram van Oost", systemImage: "person.fill") {
+                withAnimation { GameCenter.shared.debugSetPlayerName("Bram van Oost") }
+            }
+            Button("Name: none", systemImage: "person.slash") {
+                withAnimation { GameCenter.shared.debugSetPlayerName(nil) }
+            }
+            Divider()
+            Button(
+                hidesHowToPlay ? "Show How to Play" : "Hide How to Play",
+                systemImage: hidesHowToPlay ? "eye" : "eye.slash"
+            ) {
+                withAnimation { hidesHowToPlay.toggle() }
+            }
+            Divider()
+            Button("Reset difficulty nudge", systemImage: "arrow.counterclockwise") {
+                DifficultyNudge.shared.debugReset()
+                DifficultyNudge.debugForce = false
+            }
+        } label: {
+            Image(systemName: "ladybug.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(Color.coral.opacity(0.85))
+                .padding(8)
+        }
+        .accessibilityLabel("Debug menu")
+        .padding(.trailing, 16)
+        .padding(.top, 16)
+    }
+}
+#endif

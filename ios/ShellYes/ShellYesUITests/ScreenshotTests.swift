@@ -51,10 +51,11 @@ final class ScreenshotTests: XCTestCase {
         Thread.sleep(forTimeInterval: seconds)
     }
 
-    private func launch(seed: String? = nil) -> XCUIApplication {
+    private func launch(seed: String? = nil, extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-screenshotMode"]
         if let seed { app.launchArguments += ["-seed", seed] }
+        app.launchArguments += extra
         app.launch()
         settle(4.0)
         return app
@@ -108,5 +109,19 @@ final class ScreenshotTests: XCTestCase {
         startGame(app)
         settle(4.0)
         shoot("07-tally")
+    }
+
+    /// The splash with a mid-table standing under the Leaderboards
+    /// button. The simulator has no Game Center account, so the rank
+    /// is handed in by launch argument.
+    func testSplashStanding() throws {
+        _ = launch(extra: ["-standings", "mid"])
+        shoot("08-splash-standing")
+    }
+
+    /// The same line at rank one: crown, gold, Top Banana.
+    func testSplashTopBanana() throws {
+        _ = launch(extra: ["-standings", "top"])
+        shoot("09-splash-top-banana")
     }
 }
