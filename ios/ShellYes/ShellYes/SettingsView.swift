@@ -41,7 +41,7 @@ struct SettingsView: View {
                                 StampSegmented(
                                     selection: Binding(
                                         get: { settings.difficulty },
-                                        set: { settings.difficulty = $0 }
+                                        set: { settings.difficulty = $0; trackChange("difficulty", $0.rawValue) }
                                     ),
                                     options: Difficulty.allCases,
                                     labelFor: { $0.rawValue.capitalized }
@@ -52,7 +52,7 @@ struct SettingsView: View {
                                 StampSegmented(
                                     selection: Binding(
                                         get: { settings.gameSpeed },
-                                        set: { settings.gameSpeed = $0 }
+                                        set: { settings.gameSpeed = $0; trackChange("pace", $0.rawValue) }
                                     ),
                                     options: GameSpeed.allCases,
                                     labelFor: { $0.rawValue.capitalized }
@@ -62,7 +62,7 @@ struct SettingsView: View {
                             SettingsRow(title: "Quiet AI turns") {
                                 StampToggle(isOn: Binding(
                                     get: { settings.quietAITurns },
-                                    set: { settings.quietAITurns = $0 }
+                                    set: { settings.quietAITurns = $0; trackChange("quiet_ai", $0) }
                                 ))
                             }
                             Button {
@@ -130,7 +130,7 @@ struct SettingsView: View {
                                 StampSegmented(
                                     selection: Binding(
                                         get: { settings.colorMode },
-                                        set: { settings.colorMode = $0 }
+                                        set: { settings.colorMode = $0; trackChange("color_mode", $0.rawValue) }
                                     ),
                                     options: ColorMode.allCases,
                                     labelFor: { $0.rawValue.capitalized }
@@ -140,7 +140,7 @@ struct SettingsView: View {
                             SettingsRow(title: "Reduced motion") {
                                 StampToggle(isOn: Binding(
                                     get: { settings.reducedMotion },
-                                    set: { settings.reducedMotion = $0 }
+                                    set: { settings.reducedMotion = $0; trackChange("reduced_motion", $0) }
                                 ))
                             }
                         }
@@ -152,7 +152,7 @@ struct SettingsView: View {
                                 StampSegmented(
                                     selection: Binding(
                                         get: { settings.soundMode },
-                                        set: { settings.soundMode = $0 }
+                                        set: { settings.soundMode = $0; trackChange("sound_mode", $0.rawValue) }
                                     ),
                                     options: SoundMode.allCases,
                                     labelFor: soundModeLabel
@@ -168,6 +168,7 @@ struct SettingsView: View {
                     glassCard {
                         SettingsSection(title: "other") {
                             Button {
+                                trackAction("home")
                                 goHome()
                             } label: {
                                 SettingsRow(title: "Home") {
@@ -193,6 +194,7 @@ struct SettingsView: View {
                                     .foregroundStyle(Color.dimInk)
                             }
                             Button {
+                                trackAction("about")
                                 showAbout = true
                             } label: {
                                 SettingsRow(title: "About") {
@@ -227,11 +229,12 @@ struct SettingsView: View {
             AboutSheet()
         }
         .sheet(isPresented: $showExplainer) {
-            ExplainerView()
+            ExplainerView(from: "settings")
         }
         .gameCenterEntry(gameCenter)
         .alert("Start a new game?", isPresented: $showRestartConfirm) {
             Button("New game", role: .destructive) {
+                trackAction("new_game")
                 onNewGame()
                 dismiss()
             }
@@ -239,6 +242,25 @@ struct SettingsView: View {
         } message: {
             Text("Your current game will be discarded.")
         }
+    }
+
+    /// The non-toggle rows: the exits and the sheets. One event with a
+    /// `choice` prop rather than four events, for the same reason
+    /// `game_end_action` has one.
+    private func trackAction(_ choice: String) {
+        Telemetry.shared.track("settings_action", props: ["choice": choice])
+    }
+
+    /// One event for every control on this screen. A breakdown on
+    /// `setting` then answers "does anyone ever find Hard?" without a
+    /// separate event per row. Values are the stored raw strings and
+    /// bools, stringified so a single prop never changes type between
+    /// rows, and never free text.
+    private func trackChange(_ setting: String, _ value: Any) {
+        Telemetry.shared.track("settings_changed", props: [
+            "setting": setting,
+            "value": "\(value)",
+        ])
     }
 
     private func soundModeLabel(_ mode: SoundMode) -> String {

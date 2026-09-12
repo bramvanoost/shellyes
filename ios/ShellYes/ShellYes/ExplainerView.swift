@@ -1,8 +1,14 @@
 import SwiftUI
 
 struct ExplainerView: View {
+    /// Which door the sheet was opened from: `"home"` or `"settings"`.
+    let from: String
+
     @Environment(\.dismiss) private var dismiss
     @SwiftUI.State private var currentPage: Int = 0
+    /// Highest page reached, not the page left on. A player who reads
+    /// to the end and swipes back would otherwise look like a bounce.
+    @SwiftUI.State private var furthestPage: Int = 0
 
     private let pages = ExplainerPage.allCases
 
@@ -97,6 +103,23 @@ struct ExplainerView: View {
             }
         }
         .navigationBarHidden(true)
+        // Both events hang off appear/disappear rather than the Close
+        // button, because a swipe-down dismiss is the common exit and
+        // never touches that button.
+        .onAppear {
+            Telemetry.shared.track("explainer_opened", props: ["from": from])
+        }
+        .onChange(of: currentPage) { _, page in
+            furthestPage = max(furthestPage, page)
+        }
+        .onDisappear {
+            Telemetry.shared.track("explainer_closed", props: [
+                "from": from,
+                "furthest_page": furthestPage + 1,
+                "pages": pages.count,
+                "finished": furthestPage == pages.count - 1,
+            ])
+        }
     }
 }
 
@@ -518,5 +541,5 @@ private struct MiniDie: View {
 }
 
 #Preview {
-    ExplainerView()
+    ExplainerView(from: "preview")
 }

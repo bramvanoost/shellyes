@@ -354,6 +354,22 @@ struct GameView: View {
         resetTransientGameUI()
         store.dismissAIEvent()
         store.newGame()
+        trackGameStarted(from: "tally")
+    }
+
+    /// One shape for every start, so `game_started` against
+    /// `game_ended` is a clean funnel. `from` says which door the game
+    /// came through; the settings the game is played on are recorded
+    /// here rather than only at the end, so a player who abandons
+    /// still tells us what they chose.
+    private func trackGameStarted(from source: String) {
+        Telemetry.shared.track("game_started", props: [
+            "from": source,
+            "difficulty": settings.difficulty.rawValue,
+            "pace": settings.gameSpeed.rawValue,
+            "quiet_ai": settings.quietAITurns,
+            "games_played": stats.gamesPlayed,
+        ])
     }
 
     /// Clears every per-game UI flag. Shared by "New Game" and the
@@ -745,7 +761,10 @@ struct GameView: View {
                 Spacer().frame(height: 14)
             }
             .task {
-                if gameStartTime == nil { gameStartTime = Date() }
+                if gameStartTime == nil {
+                    gameStartTime = Date()
+                    trackGameStarted(from: "home")
+                }
                 await runIntroAnimation()
                 #if DEBUG
                 await applyScreenshotSeed()
@@ -933,7 +952,9 @@ struct GameView: View {
                 reviewEligible: ReviewPrompt.shared.isEligible(
                     gamesPlayed: stats.gamesPlayed,
                     wins: stats.wins
-                )
+                ),
+                reviewGamesPlayed: stats.gamesPlayed,
+                reviewWins: stats.wins
             )
         }
         .navigationBarHidden(true)

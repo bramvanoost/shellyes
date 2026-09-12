@@ -29,7 +29,18 @@ final class GameCenter {
     @ObservationIgnored private let defaults: UserDefaults
     private enum Key {
         static let didBackfill = "gamecenter.didBackfill"
+        /// Telemetry bookkeeping only. GameKit treats a re-report of an
+        /// earned achievement as a no-op, which is why the app keeps no
+        /// state for it — but without this, every later win would
+        /// re-fire `achievement_unlocked` for "First Shell" and the
+        /// number would mean nothing.
+        static let reported = "gamecenter.reportedAchievements"
     }
+
+    /// Last authentication outcome reported, so GameKit calling its
+    /// handler again (sign-out, account switch) doesn't inflate the
+    /// count with repeats of the same answer.
+    @ObservationIgnored private var lastAuthOutcome: String?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -49,6 +60,7 @@ final class GameCenter {
                     // Not signed in. Hold the sheet for later.
                     self.pendingSignIn = viewController
                     self.isAuthenticated = false
+                    self.trackAuth("not_signed_in")
                     return
                 }
                 if let error {
@@ -56,10 +68,12 @@ final class GameCenter {
                     print("[GameCenter] auth failed: \(error.localizedDescription)")
                     #endif
                     self.isAuthenticated = false
+                    self.trackAuth("failed", error: error)
                     return
                 }
                 self.pendingSignIn = nil
                 self.isAuthenticated = GKLocalPlayer.local.isAuthenticated
+                self.trackAuth(self.isAuthenticated ? "authenticated" : "not_signed_in")
             }
         }
     }
@@ -89,6 +103,30 @@ final class GameCenter {
         return presentSignInIfAvailable(from: top)
     }
 
+    /// How many players can actually reach the boards. If
+    /// `not_signed_in` dominates, the leaderboard entries on the home
+    /// screen are advertising a room most players can't enter.
+    private func trackAuth(_ outcome: String, error: Error? = nil) {
+        guard lastAuthOutcome != outcome else { return }
+        lastAuthOutcome = outcome
+        var props: [String: Any] = ["outcome": outcome]
+        if let error = error as NSError? {
+            props["error_code"] = error.code
+        }
+        Telemetry.shared.track("gamecenter_auth", props: props)
+    }
+
+    /// Submit and report failures were DEBUG prints, which means they
+    /// were invisible in the only build that matters. The code is
+    /// numeric and carries no player data.
+    private func trackFailure(_ event: String, error: Error, extra: [String: Any] = [:]) {
+        let ns = error as NSError
+        Telemetry.shared.track(event, props: extra.merging([
+            "error_code": ns.code,
+            "error_domain": ns.domain,
+        ]) { current, _ in current })
+    }
+
     // MARK: - Submitting
 
     func submit(_ value: Int, to board: Leaderboard) {
@@ -98,16 +136,22 @@ final class GameCenter {
             context: 0,
             player: GKLocalPlayer.local,
             leaderboardIDs: [board.rawValue]
-        ) { error in
+        ) { [weak self] error in
+            guard let error else { return }
             #if DEBUG
-            if let error {
-                print("[GameCenter] score submit failed: \(error.localizedDescription)")
-            }
+            print("[GameCenter] score submit failed: \(error.localizedDescription)")
             #endif
+            Task { @MainActor in
+                self?.trackFailure(
+                    "gamecenter_submit_failed",
+                    error: error,
+                    extra: ["board": board.shortKey]
+                )
+            }
         }
     }
 
-    func report(_ achievements: Set<Achievement>) {
+    func report(_ achievements: Set<Achievement>, source: String = "game") {
         guard isAuthenticated, !achievements.isEmpty else { return }
         let reports = achievements.map { achievement -> GKAchievement in
             let gk = GKAchievement(identifier: achievement.rawValue)
@@ -115,13 +159,39 @@ final class GameCenter {
             gk.showsCompletionBanner = true
             return gk
         }
-        GKAchievement.report(reports) { error in
+        GKAchievement.report(reports) { [weak self] error in
+            guard let error else { return }
             #if DEBUG
-            if let error {
-                print("[GameCenter] achievement report failed: \(error.localizedDescription)")
-            }
+            print("[GameCenter] achievement report failed: \(error.localizedDescription)")
             #endif
+            Task { @MainActor in
+                self?.trackFailure(
+                    "gamecenter_report_failed",
+                    error: error,
+                    extra: ["count": reports.count]
+                )
+            }
         }
+        trackUnlocks(achievements, source: source)
+    }
+
+    /// Fires once per achievement per install. Re-reports are silent,
+    /// so the event counts earnings rather than reports; a reinstall
+    /// starts the bookkeeping over, which under-counts rather than
+    /// inflates.
+    private func trackUnlocks(_ achievements: Set<Achievement>, source: String) {
+        var seen = Set(defaults.stringArray(forKey: Key.reported) ?? [])
+        let fresh = achievements.filter { !seen.contains($0.rawValue) }
+        guard !fresh.isEmpty else { return }
+
+        for achievement in fresh.sorted(by: { $0.shortKey < $1.shortKey }) {
+            Telemetry.shared.track("achievement_unlocked", props: [
+                "achievement": achievement.shortKey,
+                "source": source,
+            ])
+            seen.insert(achievement.rawValue)
+        }
+        defaults.set(Array(seen), forKey: Key.reported)
     }
 
     // MARK: - The two things the app actually calls
@@ -149,11 +219,14 @@ final class GameCenter {
         submit(stats.bestStreak, to: .bestStreak)
         submit(stats.biggestKeep, to: .biggestKeep)
 
-        report(AchievementRules.backfill(lifetime: LifetimeTotals(
-            gamesPlayed: stats.gamesPlayed,
-            wins: stats.wins,
-            bestStreak: stats.bestStreak
-        )))
+        report(
+            AchievementRules.backfill(lifetime: LifetimeTotals(
+                gamesPlayed: stats.gamesPlayed,
+                wins: stats.wins,
+                bestStreak: stats.bestStreak
+            )),
+            source: "backfill"
+        )
 
         defaults.set(true, forKey: Key.didBackfill)
     }

@@ -75,6 +75,15 @@ struct StatsView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        // Tracked here rather than at the row that pushes it, because
+        // the row is a NavigationLink and has no action to hang an
+        // event on. Games played rides along so the dashboard can tell
+        // a curious newcomer from someone checking a long record.
+        .onAppear {
+            Telemetry.shared.track("stats_opened", props: [
+                "games_played": stats.gamesPlayed,
+            ])
+        }
     }
 
     private var winsValue: String {

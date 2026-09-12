@@ -280,7 +280,33 @@ final class GameStore {
         cont?.resume()
     }
 
+    /// A full beach, taken from the engine rather than hardcoded so a
+    /// change to the shell range can't silently turn every new game
+    /// into a reported abandonment.
+    private static let fullBeach = initialState(playerIds: []).centerTiles.count
+
+    /// Reports the game being thrown away, if there was one. Called
+    /// from `newGame` because that is the one funnel every discard
+    /// goes through: Home, the settings restart, and New Game from the
+    /// tally all land here. A game nobody has touched is not an
+    /// abandonment, and a finished one is a `game_ended`, so both are
+    /// filtered out.
+    private func reportAbandonedGame() {
+        guard state.phase != .over else { return }
+        let claimed = state.players.reduce(0) { $0 + $1.tiles.count }
+        let touched = claimed > 0 || state.centerTiles.count != Self.fullBeach
+        guard touched else { return }
+
+        Telemetry.shared.track("game_abandoned", props: [
+            "my_score": score(state)[Self.humanSeat],
+            "my_shells": state.players[Self.humanSeat].tiles.count,
+            "shells_left": state.centerTiles.count,
+            "difficulty": settings.difficulty.rawValue,
+        ])
+    }
+
     func newGame() {
+        reportAbandonedGame()
         rng = Mulberry32(seed: UInt32.random(in: 1...UInt32.max))
         state = initialState(playerIds: Self.freshPlayerIds())
         aiEvent = nil

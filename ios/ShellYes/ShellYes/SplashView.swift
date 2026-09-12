@@ -139,7 +139,7 @@ struct SplashView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExplainer) {
-            ExplainerView()
+            ExplainerView(from: "home")
         }
         .gameCenterEntry(gameCenter)
         .task {

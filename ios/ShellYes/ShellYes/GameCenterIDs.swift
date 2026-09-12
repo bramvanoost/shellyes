@@ -17,6 +17,15 @@ enum Leaderboard: String, CaseIterable {
     case bestStreak  = "com.fastronaut.game.shellyes.streak.best"
     case biggestKeep = "com.fastronaut.game.shellyes.keep.biggest"
 
+    /// Short key for telemetry, so an event carries `score.hard`
+    /// rather than the full reverse-DNS id. Same trick as
+    /// `Achievement.shortKey`.
+    var shortKey: String {
+        rawValue.replacingOccurrences(
+            of: "com.fastronaut.game.shellyes.", with: ""
+        )
+    }
+
     /// The score board matching a `Difficulty.rawValue`. Unknown values
     /// fall to Normal rather than crashing, so a future difficulty
     /// can't take the app down before its board exists.

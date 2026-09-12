@@ -27,6 +27,10 @@ struct CountingCeremony: View {
     /// win itself is checked here; the history lives at the call site,
     /// which is the one that can see `StatsStore`.
     var reviewEligible: Bool = false
+    /// Context for the `review_prompt_shown` event: how much history
+    /// the player had when we spent the ask. Counts only, no identity.
+    var reviewGamesPlayed: Int = 0
+    var reviewWins: Int = 0
 
     @Environment(\.requestReview) private var requestReview
 
@@ -349,7 +353,10 @@ struct CountingCeremony: View {
                 try? await Task.sleep(nanoseconds: 1_400_000_000)
                 guard !Task.isCancelled else { return }
                 ReviewPrompt.shared.markAsked()
-                Telemetry.shared.track("review_prompt_shown")
+                Telemetry.shared.track("review_prompt_shown", props: [
+                    "games_played": reviewGamesPlayed,
+                    "wins": reviewWins,
+                ])
                 requestReview()
             }
         }

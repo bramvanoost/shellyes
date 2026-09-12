@@ -44,7 +44,21 @@ struct ShellYesApp: App {
                             SettingsView(
                                 settings: settings,
                                 stats: stats,
-                                onNewGame: { store.newGame() }
+                                onNewGame: {
+                                    store.newGame()
+                                    // Settings sits on top of the game
+                                    // screen, so dismissing lands back on
+                                    // a GameView that never re-runs its
+                                    // task. Without this the restart is
+                                    // the one start that goes unrecorded.
+                                    Telemetry.shared.track("game_started", props: [
+                                        "from": "settings",
+                                        "difficulty": settings.difficulty.rawValue,
+                                        "pace": settings.gameSpeed.rawValue,
+                                        "quiet_ai": settings.quietAITurns,
+                                        "games_played": stats.gamesPlayed,
+                                    ])
+                                }
                             )
                         case .stats:
                             StatsView(stats: stats)
