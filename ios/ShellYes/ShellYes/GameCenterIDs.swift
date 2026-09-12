@@ -26,6 +26,46 @@ enum Leaderboard: String, CaseIterable {
         )
     }
 
+    /// Short human name for the board, used where the app shows the
+    /// player's own standing on it. Deliberately lowercase and terse:
+    /// it sits in the quiet line under the splash's Leaderboards
+    /// button, not in a heading. The board's real title lives in App
+    /// Store Connect and is Apple's to render inside their sheet.
+    var displayName: String {
+        switch self {
+        case .scoreEasy:   return "easy"
+        case .scoreNormal: return "normal"
+        case .scoreHard:   return "hard"
+        case .bestStreak:  return "streak"
+        case .biggestKeep: return "biggest keep"
+        }
+    }
+
+    /// What follows the rank on the splash line. Bare, no preposition:
+    /// "on" and "for" read well in a sentence and cost a line break on
+    /// a phone, and the line is not a sentence.
+    var standingPhrase: String {
+        switch self {
+        case .scoreEasy:   return "easy, all time"
+        case .scoreNormal: return "normal, all time"
+        case .scoreHard:   return "hard, all time"
+        case .bestStreak:  return "best streak, all time"
+        case .biggestKeep: return "biggest keep, all time"
+        }
+    }
+
+    /// The weekly twin of this board, so a caller that has one can
+    /// reach the other without a second switch.
+    var weekly: WeeklyLeaderboard {
+        switch self {
+        case .scoreEasy:   return .scoreEasy
+        case .scoreNormal: return .scoreNormal
+        case .scoreHard:   return .scoreHard
+        case .bestStreak:  return .bestStreak
+        case .biggestKeep: return .biggestKeep
+        }
+    }
+
     /// The score board matching a `Difficulty.rawValue`. Unknown values
     /// fall to Normal rather than crashing, so a future difficulty
     /// can't take the app down before its board exists.
@@ -80,5 +120,55 @@ enum Achievement: String, CaseIterable {
              .bust3, .squeaker, .bookends:
             return false
         }
+    }
+}
+
+/// The five recurring boards: the same five contests, restarted every
+/// week. They are a separate enum rather than a `period` axis on
+/// `Leaderboard` precisely so `Leaderboard.allCases` keeps meaning "the
+/// all-time boards" — `loadStandings(for:)` walks whatever list it is
+/// handed, and folding the two together would silently double every
+/// caller's work.
+///
+/// Same warning as above: these ids are permanent once created in App
+/// Store Connect.
+enum WeeklyLeaderboard: String, CaseIterable {
+    case scoreEasy   = "com.fastronaut.game.shellyes.weekly.score.easy"
+    case scoreNormal = "com.fastronaut.game.shellyes.weekly.score.normal"
+    case scoreHard   = "com.fastronaut.game.shellyes.weekly.score.hard"
+    case bestStreak  = "com.fastronaut.game.shellyes.weekly.streak.best"
+    case biggestKeep = "com.fastronaut.game.shellyes.weekly.keep.biggest"
+
+    var shortKey: String {
+        rawValue.replacingOccurrences(
+            of: "com.fastronaut.game.shellyes.", with: ""
+        )
+    }
+
+    var displayName: String {
+        switch self {
+        case .scoreEasy:   return "easy"
+        case .scoreNormal: return "normal"
+        case .scoreHard:   return "hard"
+        case .bestStreak:  return "streak"
+        case .biggestKeep: return "biggest keep"
+        }
+    }
+
+    /// The all-time phrasing plus the window it applies to. "this week"
+    /// is the whole reason these boards are worth showing, so it is in
+    /// the line rather than left to a heading the player has to find.
+    var standingPhrase: String {
+        switch self {
+        case .scoreEasy:   return "easy, this week"
+        case .scoreNormal: return "normal, this week"
+        case .scoreHard:   return "hard, this week"
+        case .bestStreak:  return "best streak, this week"
+        case .biggestKeep: return "biggest keep, this week"
+        }
+    }
+
+    static func score(forDifficulty raw: String) -> WeeklyLeaderboard {
+        Leaderboard.score(forDifficulty: raw).weekly
     }
 }

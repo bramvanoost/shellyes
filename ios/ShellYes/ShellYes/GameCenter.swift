@@ -130,12 +130,24 @@ final class GameCenter {
     // MARK: - Submitting
 
     func submit(_ value: Int, to board: Leaderboard) {
+        submit(value, toID: board.rawValue, shortKey: board.shortKey)
+    }
+
+    /// The weekly twin of the same call. Recurring boards take a score
+    /// exactly like a classic one — Game Center decides which
+    /// occurrence it lands in from the clock, not from anything the app
+    /// sends.
+    func submit(_ value: Int, to board: WeeklyLeaderboard) {
+        submit(value, toID: board.rawValue, shortKey: board.shortKey)
+    }
+
+    private func submit(_ value: Int, toID id: String, shortKey: String) {
         guard isAuthenticated else { return }
         GKLeaderboard.submitScore(
             value,
             context: 0,
             player: GKLocalPlayer.local,
-            leaderboardIDs: [board.rawValue]
+            leaderboardIDs: [id]
         ) { [weak self] error in
             guard let error else { return }
             #if DEBUG
@@ -145,7 +157,7 @@ final class GameCenter {
                 self?.trackFailure(
                     "gamecenter_submit_failed",
                     error: error,
-                    extra: ["board": board.shortKey]
+                    extra: ["board": shortKey]
                 )
             }
         }
@@ -197,12 +209,27 @@ final class GameCenter {
     // MARK: - The two things the app actually calls
 
     /// Everything Game Center should hear about one finished game.
-    func recordGameOver(summary: GameSummary, lifetime: LifetimeTotals, biggestKeep: Int) {
+    func recordGameOver(
+        summary: GameSummary,
+        lifetime: LifetimeTotals,
+        biggestKeep: Int,
+        weekly: WeeklyBests
+    ) {
         guard isAuthenticated else { return }
 
-        submit(summary.score, to: .score(forDifficulty: summary.difficulty))
-        submit(lifetime.bestStreak, to: .bestStreak)
-        submit(biggestKeep, to: .biggestKeep)
+        submit(summary.score, to: Leaderboard.score(forDifficulty: summary.difficulty))
+        submit(lifetime.bestStreak, to: Leaderboard.bestStreak)
+        submit(biggestKeep, to: Leaderboard.biggestKeep)
+
+        // The same game, told to the boards that restart every week.
+        // The score here is a sum of up to three games, which is why it
+        // arrives pre-computed rather than as `summary.score`.
+        submit(
+            weekly.score(for: summary.difficulty),
+            to: WeeklyLeaderboard.score(forDifficulty: summary.difficulty)
+        )
+        submit(weekly.bestStreak, to: WeeklyLeaderboard.bestStreak)
+        submit(weekly.biggestKeep, to: WeeklyLeaderboard.biggestKeep)
 
         report(AchievementRules.unlocked(after: summary, lifetime: lifetime))
     }
@@ -210,14 +237,19 @@ final class GameCenter {
     /// One-time catch-up for players who already have a history when
     /// Game Center arrives. Posts their stored best runs to the right
     /// boards and grants the lifetime achievements.
+    ///
+    /// All-time boards only, deliberately. A best run from March is not
+    /// something that happened this week, and posting it to a recurring
+    /// board would hand a player a rank they did not earn in the
+    /// occurrence it lands in.
     func backfillIfNeeded(from stats: StatsStore) {
         guard isAuthenticated, !defaults.bool(forKey: Key.didBackfill) else { return }
 
         for run in stats.bestRuns {
-            submit(run.score, to: .score(forDifficulty: run.difficulty))
+            submit(run.score, to: Leaderboard.score(forDifficulty: run.difficulty))
         }
-        submit(stats.bestStreak, to: .bestStreak)
-        submit(stats.biggestKeep, to: .biggestKeep)
+        submit(stats.bestStreak, to: Leaderboard.bestStreak)
+        submit(stats.biggestKeep, to: Leaderboard.biggestKeep)
 
         report(
             AchievementRules.backfill(lifetime: LifetimeTotals(

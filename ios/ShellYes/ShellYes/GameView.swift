@@ -827,7 +827,8 @@ struct GameView: View {
                         wins: stats.wins,
                         bestStreak: stats.bestStreak
                     ),
-                    biggestKeep: stats.biggestKeep
+                    biggestKeep: stats.biggestKeep,
+                    weekly: stats.weeklyBests()
                 )
             }
         }

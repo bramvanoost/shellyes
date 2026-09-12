@@ -53,6 +53,7 @@ final class StatsStore {
         static let gamesByPace         = "stats.gamesByPace"
         static let winsByPace          = "stats.winsByPace"
         static let bestRuns            = "stats.bestRuns"
+        static let weekly              = "stats.weekly"
     }
 
     /// How many records the leaderboard keeps. Five fits the stats
@@ -95,6 +96,16 @@ final class StatsStore {
         }
     }
 
+    /// This week's numbers, for the recurring boards. Lifetime stats
+    /// above are never touched by the roll-over: the two live side by
+    /// side, the way the all-time and weekly boards do.
+    private(set) var weekly: WeeklyBests {
+        didSet {
+            guard let data = try? JSONEncoder().encode(weekly) else { return }
+            defaults.set(data, forKey: Key.weekly)
+        }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.gamesPlayed = defaults.integer(forKey: Key.gamesPlayed)
@@ -124,6 +135,22 @@ final class StatsStore {
         } else {
             self.bestRuns = []
         }
+        if let data = defaults.data(forKey: Key.weekly),
+           let decoded = try? JSONDecoder().decode(WeeklyBests.self, from: data) {
+            // Not rolled over here. Reading is not playing, and a week
+            // that turns over while the app sits on a shelf should not
+            // rewrite storage — the next finished game does that.
+            self.weekly = decoded
+        } else {
+            self.weekly = .empty(weekID: WeeklyBests.weekID(for: Date()))
+        }
+    }
+
+    /// This week's numbers as of `date`, with a stale week read as
+    /// empty. Every reader goes through this rather than `weekly`
+    /// directly, so nothing can show last week's sum on a Monday.
+    func weeklyBests(on date: Date = Date()) -> WeeklyBests {
+        weekly.rolledOver(to: date)
     }
 
     /// The face most often set aside, or nil if no picks recorded yet.
@@ -143,9 +170,19 @@ final class StatsStore {
         busts += 1
     }
 
-    func recordBank(sum: Int, stoleATile: Bool) {
+    func recordBank(sum: Int, stoleATile: Bool, date: Date = Date()) {
         if sum > biggestKeep { biggestKeep = sum }
         if stoleATile { steals += 1 }
+        var week = weekly.rolledOver(to: date)
+        if sum > week.biggestKeep {
+            week.biggestKeep = sum
+            weekly = week
+        } else if week.weekID != weekly.weekID {
+            // The keep didn't beat the week's best, but the week itself
+            // turned over — store the empty week now rather than let a
+            // stale id sit there waiting to be read.
+            weekly = week
+        }
     }
 
     func recordPicks(_ faces: [Face]) {
@@ -185,6 +222,14 @@ final class StatsStore {
                 won: humanWon
             )
         )
+
+        // The week's own record of the same game. Rolled over first, so
+        // the first game of a new week starts that week rather than
+        // joining the last one.
+        var week = weekly.rolledOver(to: date)
+        week.add(score: humanScore, difficulty: difficulty)
+        if winStreak > week.bestStreak { week.bestStreak = winStreak }
+        weekly = week
     }
 
     #if DEBUG
