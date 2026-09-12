@@ -332,7 +332,7 @@ struct ShareCardSheet: View {
     private func loadRows() async {
         #if DEBUG
         if ScreenshotMode.seedsBoardRows {
-            rows = BoardCard.mockRows
+            rows = BoardCard.mockRows(me: GameCenter.shared.playerFirstName)
             isLoadingRows = false
             return
         }

@@ -170,15 +170,21 @@ private struct BoardCardRow: View {
 extension BoardCard {
     /// Stand-in rows for the simulator, which has no Game Center
     /// account and would otherwise only ever show the empty state.
-    static let mockRows: [BoardRow] = [
-        BoardRow(rank: 1, name: "Bram", score: 96, isMe: true),
+    ///
+    /// The local player's row is named by whoever the run says they
+    /// are, so a capture seeded with `-playerName` does not show one
+    /// name in the greeting and another on the board.
+    static func mockRows(me: String?) -> [BoardRow] {
+        [
+        BoardRow(rank: 1, name: me ?? "You", score: 96, isMe: true),
         BoardRow(rank: 2, name: "Marina", score: 94, isMe: false),
-        BoardRow(rank: 3, name: "Kai", score: 91, isMe: false),
+        BoardRow(rank: 3, name: "Nalu", score: 91, isMe: false),
         BoardRow(rank: 4, name: "Hazel", score: 88, isMe: false),
         BoardRow(rank: 5, name: "Reef", score: 84, isMe: false),
         BoardRow(rank: 6, name: "Tine", score: 79, isMe: false),
         BoardRow(rank: 7, name: "Coral", score: 77, isMe: false),
         BoardRow(rank: 8, name: "Dune", score: 72, isMe: false),
-    ]
+        ]
+    }
 }
 #endif

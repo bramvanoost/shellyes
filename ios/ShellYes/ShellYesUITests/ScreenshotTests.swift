@@ -125,18 +125,43 @@ final class ScreenshotTests: XCTestCase {
         shoot("09-splash-top-banana")
     }
 
-    /// The share card a held number one opens. Needs three things the
-    /// simulator can't supply: a rank, a name, and the sheet itself.
+    /// The board a tapped crown opens on: the sheet's first page, with
+    /// the card's top edge peeking out from under it. Rows are seeded
+    /// by `-boardCard`; a simulator has no Game Center account and
+    /// would otherwise capture the empty state.
+    func testShareBoard() throws {
+        let app = launch(extra: [
+            "-standings", "top",
+            "-playerName", "Kai Moana",
+            "-shareCard", "weekly",
+            "-boardCard",
+        ])
+        let heading = app.staticTexts
+            .matching(NSPredicate(format: "label ==[c] %@", "easy · this week"))
+            .firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 15), "board page never opened")
+        // The rows fade in behind the sheet's own slide, and a second
+        // was not enough: one capture came out with rank one drawn and
+        // the rest still ghosting.
+        settle(2.5)
+        shoot("11-share-board")
+    }
+
+    /// The card itself, on page two. `-sharePage` scrolls there at
+    /// launch: a capture run cannot swipe, and the card is the shot
+    /// this whole feature is for.
     func testShareCard() throws {
         let app = launch(extra: [
             "-standings", "top",
             "-playerName", "Kai Moana",
             "-shareCard", "weekly",
+            "-boardCard",
+            "-sharePage",
         ])
         let share = button(app, "share")
         XCTAssertTrue(share.waitForExistence(timeout: 15), "share card never opened")
-        settle(1.0)
-        shoot("11-share-card")
+        settle(2.5)
+        shoot("12-share-card")
     }
 
     /// The rarer card: palms instead of a crown, and a longer title to
@@ -146,11 +171,13 @@ final class ScreenshotTests: XCTestCase {
             "-standings", "top",
             "-playerName", "Kai Moana",
             "-shareCard", "allTime",
+            "-boardCard",
+            "-sharePage",
         ])
         let share = button(app, "share")
         XCTAssertTrue(share.waitForExistence(timeout: 15), "share card never opened")
-        settle(1.0)
-        shoot("12-share-card-kahuna")
+        settle(2.5)
+        shoot("13-share-card-kahuna")
     }
 
     /// The one-time offer to leave Easy, on the tally where it appears.
