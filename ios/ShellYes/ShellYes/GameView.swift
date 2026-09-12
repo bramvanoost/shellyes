@@ -687,6 +687,13 @@ struct GameView: View {
                         #if DEBUG
                         debugShowStats = true
                         #endif
+                    },
+                    onDebugForceNudge: {
+                        #if DEBUG
+                        // Armed here, read by the tally: arm it,
+                        // then end the game from the next menu item.
+                        DifficultyNudge.debugForce.toggle()
+                        #endif
                     }
                 )
                 .opacity(revealChrome ? 1 : 0)
@@ -955,7 +962,20 @@ struct GameView: View {
                     wins: stats.wins
                 ),
                 reviewGamesPlayed: stats.gamesPlayed,
-                reviewWins: stats.wins
+                reviewWins: stats.wins,
+                // Same timing as the review ask, same reason: `stats`
+                // already counts the game that just finished, so the
+                // third game on Easy is offered the step up on the
+                // tally it earned.
+                nudgeEligible: DifficultyNudge.shared.isEligible(
+                    settings: settings,
+                    stats: stats
+                ),
+                nudgeGamesOnEasy: stats.gamesByDifficulty[Difficulty.easy.rawValue] ?? 0,
+                nudgeWinsOnEasy: stats.winsByDifficulty[Difficulty.easy.rawValue] ?? 0,
+                onStepUpDifficulty: {
+                    settings.difficulty = .normal
+                }
             )
         }
         .navigationBarHidden(true)
@@ -975,6 +995,7 @@ struct ChromeBar: View {
     var onDebugEndGame: (() -> Void)? = nil
     var onDebugSeedBests: (() -> Void)? = nil
     var onDebugShowStats: (() -> Void)? = nil
+    var onDebugForceNudge: (() -> Void)? = nil
 
     var body: some View {
         HStack {
@@ -996,6 +1017,15 @@ struct ChromeBar: View {
                 }
                 if let onDebugBankChoice {
                     Button("Trigger bank choice", systemImage: "questionmark.diamond.fill", action: onDebugBankChoice)
+                }
+                if let onDebugForceNudge {
+                    Button(
+                        DifficultyNudge.debugForce
+                            ? "Difficulty nudge: armed"
+                            : "Arm difficulty nudge",
+                        systemImage: DifficultyNudge.debugForce ? "checkmark.circle.fill" : "arrow.up.right.circle",
+                        action: onDebugForceNudge
+                    )
                 }
                 if let onDebugEndGame {
                     Button("End game (tally + Home button)", systemImage: "flag.checkered", action: onDebugEndGame)

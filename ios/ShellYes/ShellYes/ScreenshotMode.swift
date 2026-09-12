@@ -35,6 +35,13 @@ enum ScreenshotMode {
         case top
     }
 
+    /// Forces the one-time difficulty nudge on the next tally. Its
+    /// real gate needs ten finished games on Easy with a win among
+    /// them, which is ten games a capture run would have to play.
+    static var forcesDifficultyNudge: Bool {
+        ProcessInfo.processInfo.arguments.contains("-forceDifficultyNudge")
+    }
+
     static var standingsSeed: StandingsSeed? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-standings"), i + 1 < args.count else { return nil }

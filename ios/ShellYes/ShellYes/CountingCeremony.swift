@@ -31,6 +31,16 @@ struct CountingCeremony: View {
     /// the player had when we spent the ask. Counts only, no identity.
     var reviewGamesPlayed: Int = 0
     var reviewWins: Int = 0
+    /// Whether `DifficultyNudge` says this player has outgrown Easy.
+    /// Same split as the review ask: the policy is decided at the call
+    /// site, which can see `SettingsStore` and `StatsStore`.
+    var nudgeEligible: Bool = false
+    /// Context for `difficulty_nudge_shown`: how much Easy it took.
+    var nudgeGamesOnEasy: Int = 0
+    var nudgeWinsOnEasy: Int = 0
+    /// Accepting the nudge moves the setting to Normal. Owned by the
+    /// caller because this view holds no settings of its own.
+    var onStepUpDifficulty: () -> Void = {}
 
     @Environment(\.requestReview) private var requestReview
 
@@ -40,6 +50,8 @@ struct CountingCeremony: View {
     @SwiftUI.State private var showNewGame: Bool = false
     @SwiftUI.State private var sparkleWave: Int = 0
     @SwiftUI.State private var humanWinHeadlineSparkle: Int = 0
+    @SwiftUI.State private var showNudge: Bool = false
+    @SwiftUI.State private var nudgeAnswered: Bool = false
 
     private var winnerIndices: [Int] {
         guard let top = scores.max() else { return [] }
@@ -59,6 +71,33 @@ struct CountingCeremony: View {
 
     private var isHumanWin: Bool {
         winnerIndices.count == 1 && winnerIndices[0] == GameStore.humanSeat
+    }
+
+    private var offersReviewAsk: Bool {
+        #if DEBUG
+        // A capture run asked for the difficulty card, so the rating
+        // dialog would only land on top of the thing being captured.
+        if ScreenshotMode.forcesDifficultyNudge { return false }
+        #endif
+        return reviewEligible && isHumanWin
+    }
+
+    /// The difficulty card lands on the player's own win, and yields
+    /// to the rating ask when both want the same tally.
+    ///
+    /// On a win because the card says "you're winning on Easy" and a
+    /// screen that just read "Jonas wins." makes a liar of it. Yielding
+    /// because iOS caps the rating dialog at three a year and two
+    /// prompts stacked on one tally is how a calm game stops being
+    /// calm — the nudge can wait for the next win, the ask can't be
+    /// re-spent.
+    private var offersDifficultyNudge: Bool {
+        #if DEBUG
+        // A capture run, or a thumb on the ladybug menu, can't choose
+        // whether the dice hand it a win.
+        if DifficultyNudge.isDebugForced { return nudgeEligible }
+        #endif
+        return nudgeEligible && isHumanWin && !offersReviewAsk
     }
 
     var body: some View {
@@ -120,6 +159,24 @@ struct CountingCeremony: View {
 
                 Spacer()
 
+                if showNudge {
+                    DifficultyNudgeCard(
+                        onAccept: {
+                            answerNudge(accepted: true)
+                            onStepUpDifficulty()
+                        },
+                        onDecline: { answerNudge(accepted: false) }
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 18)
+                    .transition(.opacity)
+                    // The card and the buttons below it are the only
+                    // things on this screen with a fixed job. Given
+                    // priority, the celebration above gives up its
+                    // slack instead of the card losing a line.
+                    .layoutPriority(1)
+                }
+
                 if showNewGame {
                     VStack(spacing: 14) {
                         Button("New Game") {
@@ -160,6 +217,23 @@ struct CountingCeremony: View {
         }
         .task {
             await runCeremony()
+        }
+    }
+
+    /// Both answers close the card for good; the bookkeeping was
+    /// already spent when it appeared. Only the telemetry differs, and
+    /// that difference is the whole question: does anyone take the
+    /// step up when offered it.
+    private func answerNudge(accepted: Bool) {
+        guard !nudgeAnswered else { return }
+        nudgeAnswered = true
+        Telemetry.shared.track("difficulty_nudge_answered", props: [
+            "choice": accepted ? "accepted" : "declined",
+            "games_on_easy": nudgeGamesOnEasy,
+            "wins_on_easy": nudgeWinsOnEasy,
+        ])
+        withAnimation(.easeOut(duration: 0.35)) {
+            showNudge = false
         }
     }
 
@@ -348,7 +422,7 @@ struct CountingCeremony: View {
         //
         // Runs in its own Task so the sparkle loops below start on
         // time rather than waiting out the delay.
-        if reviewEligible, isHumanWin {
+        if offersReviewAsk {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 1_400_000_000)
                 guard !Task.isCancelled else { return }
@@ -358,6 +432,26 @@ struct CountingCeremony: View {
                     "wins": reviewWins,
                 ])
                 requestReview()
+            }
+        }
+
+        // The difficulty card comes after the buttons, on the same
+        // beat the rating ask would have used. It is not a modal: the
+        // tally is still readable behind it and both answers dismiss it
+        // for good.
+        if offersDifficultyNudge {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_400_000_000)
+                guard !Task.isCancelled else { return }
+                DifficultyNudge.shared.markShown()
+                Telemetry.shared.track("difficulty_nudge_shown", props: [
+                    "games_on_easy": nudgeGamesOnEasy,
+                    "wins_on_easy": nudgeWinsOnEasy,
+                    "won_this_game": isHumanWin,
+                ])
+                withAnimation(.easeOut(duration: 0.45)) {
+                    showNudge = true
+                }
             }
         }
 
@@ -374,6 +468,96 @@ struct CountingCeremony: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             sparkleWave += 1
         }
+    }
+}
+
+/// The one-time offer to leave Easy behind. Two answers, both final:
+/// the card is spent whichever way it is tapped, so neither reads as
+/// "ask me again".
+private struct DifficultyNudgeCard: View {
+    let onAccept: () -> Void
+    let onDecline: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("deeper water?")
+                .font(.avenir(17, weight: .medium, italic: true))
+                .tracking(1.5)
+                .foregroundStyle(Color.coral)
+
+            // Short on purpose: the tally is a tall screen and this
+            // card is the last thing on it. The break is hard rather
+            // than wrapped so the two sentences always split where
+            // they were written to split. `fixedSize` keeps both lines
+            // whole when the stack above runs out of room — without it
+            // SwiftUI compresses the text to one truncated line rather
+            // than shrinking anything else.
+            Text("You're winning on Easy.\nNormal rivals hold out longer.")
+                .font(.avenir(13, weight: .medium))
+                .lineSpacing(3)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(Color.ink.opacity(0.75))
+                .padding(.horizontal, 6)
+
+            // Both answers wear the same soft inset the difficulty
+            // control in Settings wears, because this is that control
+            // asked as a question. Sentence case, not the splash's
+            // tracked caps: caps are for stamps you navigate with, and
+            // "Normal" here has to read as the same word the Settings
+            // segment spells.
+            HStack(spacing: 10) {
+                GhostAnswer(title: "Stay on Easy", preferred: false, action: onDecline)
+                GhostAnswer(title: "Try Normal", preferred: true, action: onAccept)
+            }
+            .padding(.top, 2)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.cardSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.ink.opacity(0.18), lineWidth: 1)
+        )
+        // The card animates in a beat after the buttons, so a capture
+        // run has to wait for it rather than guess at the delay.
+        .accessibilityIdentifier("difficultyNudge")
+    }
+}
+
+/// One of the card's two answers. Both are the same soft inset shape;
+/// only weight and ink separate the one being suggested from the one
+/// that changes nothing. Nothing shouts, which is the point — a player
+/// who wants to stay on Easy should not feel talked out of it.
+private struct GhostAnswer: View {
+    let title: String
+    let preferred: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.avenir(13, weight: preferred ? .demiBold : .medium))
+                .foregroundStyle(Color.ink.opacity(preferred ? 0.9 : 0.55))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.insetSurface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(
+                            Color.ink.opacity(preferred ? 0.4 : 0.2),
+                            lineWidth: 1
+                        )
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
     }
 }
 

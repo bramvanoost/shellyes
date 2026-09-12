@@ -124,4 +124,21 @@ final class ScreenshotTests: XCTestCase {
         _ = launch(extra: ["-standings", "top"])
         shoot("09-splash-top-banana")
     }
+
+    /// The one-time offer to leave Easy, on the tally where it appears.
+    /// `-forceDifficultyNudge` stands in for the ten finished games
+    /// its real gate wants.
+    func testDifficultyNudge() throws {
+        let app = launch(seed: "tally", extra: ["-forceDifficultyNudge"])
+        startGame(app)
+        // The card animates in a beat after the New Game button, which
+        // itself waits out the whole counting ceremony. Waiting on the
+        // element beats guessing at the total.
+        let headline = app.staticTexts["deeper water?"]
+        let appeared = headline.waitForExistence(timeout: 25)
+        // Let the card finish fading in before the shutter.
+        settle(1.2)
+        shoot("10-difficulty-nudge")
+        XCTAssertTrue(appeared, "nudge card never appeared")
+    }
 }
