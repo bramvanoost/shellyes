@@ -37,6 +37,27 @@ struct ExplainerView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
 
+                // Swipe hint, first page only. It's teaching, not
+                // chrome: once the player has moved off page one they
+                // know how, and a hint drifting through all seven
+                // pages is just noise. The height is reserved either
+                // way so the dot row doesn't jump when it goes.
+                //
+                // Sits above the dots, not beside them. Level with the
+                // dot row it lands on the painted palms, where a 15pt
+                // glyph — ink or gold — disappears into the
+                // silhouette. Up here it's on clean gradient, in the
+                // gap the page copy leaves empty.
+                ZStack {
+                    if currentPage == 0 {
+                        SwipeNudge()
+                            .transition(.opacity)
+                    }
+                }
+                .frame(height: 30)
+                .padding(.bottom, 16)
+                .animation(.easeOut(duration: 0.3), value: currentPage == 0)
+
                 HStack(spacing: 8) {
                     ForEach(pages.indices, id: \.self) { i in
                         ShellCardShape()
@@ -76,6 +97,43 @@ struct ExplainerView: View {
             }
         }
         .navigationBarHidden(true)
+    }
+}
+
+/// The swipe affordance: the word, then a chevron that breathes to the
+/// right. A lone glyph was tried first and lost — at this size, on this
+/// background, it read as a speck of the beach painting. The word is
+/// what actually teaches; the drift is what draws the eye to the word.
+///
+/// Coral and lowercase italic to match the "the goal" eyebrow above it,
+/// so it reads as the page's own voice rather than system chrome.
+/// Non-interactive on purpose: the page itself takes the tap.
+private struct SwipeNudge: View {
+    @SwiftUI.State private var drifting = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("swipe")
+                .font(.avenir(18, weight: .demiBold, italic: true))
+                .tracking(3.5)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 19, weight: .semibold))
+                .offset(x: drifting ? 8 : 0)
+        }
+        // Cream on the lavender sky, lifted off it by a soft ink
+        // shadow — the same pairing the HOME label uses on the tally.
+        // Coral was tried first and sank into the background: it's a
+        // mid-tone against a mid-tone.
+        .foregroundStyle(Color.stampText)
+        .shadow(color: Color.treasureInk.opacity(0.35), radius: 4, x: 0, y: 1)
+        .opacity(drifting ? 1.0 : 0.55)
+        .animation(
+            .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+            value: drifting
+        )
+        .allowsHitTesting(false)
+        .onAppear { drifting = true }
     }
 }
 
