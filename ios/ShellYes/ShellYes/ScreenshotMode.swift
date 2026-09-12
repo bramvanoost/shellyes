@@ -52,6 +52,20 @@ enum ScreenshotMode {
         case allTime
     }
 
+    /// Hands the board page stand-in rows. The simulator has no Game
+    /// Center account, so without this the board only ever captures as
+    /// its empty state.
+    static var seedsBoardRows: Bool {
+        ProcessInfo.processInfo.arguments.contains("-boardCard")
+    }
+
+    /// Opens the share sheet already scrolled past the board to the
+    /// card, which is otherwise only reachable by a swipe a capture
+    /// run cannot perform.
+    static var startsOnShareCard: Bool {
+        ProcessInfo.processInfo.arguments.contains("-sharePage")
+    }
+
     static var shareCardSeed: ShareCardSeed? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-shareCard"), i + 1 < args.count else { return nil }

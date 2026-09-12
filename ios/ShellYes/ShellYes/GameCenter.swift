@@ -274,6 +274,61 @@ final class GameCenter {
         }
     }
 
+    /// The top of one board, plus the local player's own row.
+    ///
+    /// `loadStandings` asks the same call for a range of one and keeps
+    /// only the rank; this one keeps the entries, because the share
+    /// sheet draws the board itself rather than handing the player to
+    /// Apple's screen. Eight rows is what fits on the card at a
+    /// readable size on the smallest phone we support.
+    ///
+    /// A local player outside the top eight is appended rather than
+    /// dropped: their row is the only reason this board is worth
+    /// showing them at all, and `loadEntries` hands it back separately
+    /// exactly so it can be.
+    ///
+    /// Returns empty rather than throwing, like every other read here.
+    /// The board page has an empty state and it is a better outcome
+    /// than an error in front of somebody who just won something.
+    func loadBoardRows(for boardID: String, top: Int = 8) async -> [BoardRow] {
+        guard isAuthenticated, !boardID.isEmpty else { return [] }
+        do {
+            let boards = try await GKLeaderboard.loadLeaderboards(IDs: [boardID])
+            guard let board = boards.first else { return [] }
+            let (localEntry, entries, _) = try await board.loadEntries(
+                for: .global,
+                timeScope: .allTime,
+                range: NSRange(location: 1, length: top)
+            )
+            let localID = GKLocalPlayer.local.gamePlayerID
+            var rows = entries.map { entry in
+                BoardRow(
+                    rank: entry.rank,
+                    name: entry.player.displayName,
+                    score: entry.score,
+                    isMe: entry.player.gamePlayerID == localID
+                )
+            }
+            if let localEntry, !rows.contains(where: { $0.isMe }) {
+                rows.append(
+                    BoardRow(
+                        rank: localEntry.rank,
+                        name: localEntry.player.displayName,
+                        score: localEntry.score,
+                        isMe: true
+                    )
+                )
+            }
+            return rows.sorted { $0.rank < $1.rank }
+        } catch {
+            #if DEBUG
+            print("[GameCenter] board load failed: \(error.localizedDescription)")
+            #endif
+            trackFailure("gamecenter_board_failed", error: error)
+            return []
+        }
+    }
+
     func report(_ achievements: Set<Achievement>, source: String = "game") {
         guard isAuthenticated, !achievements.isEmpty else { return }
         let reports = achievements.map { achievement -> GKAchievement in
