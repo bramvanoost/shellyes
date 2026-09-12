@@ -40,6 +40,60 @@ struct ShareCardSubject: Equatable, Identifiable {
     /// "96 coins", "5 wins in a row". Nil for a board this build
     /// doesn't recognise, in which case the card simply omits the line.
     let scorePhrase: String?
+    /// How many players are on the board this card came from, so the
+    /// board page can put a denominator under the rows.
+    var total: Int = 0
+    /// "easy, this week" — the board this card came from, as the second
+    /// page's heading.
+    var boardTitle: String = ""
+    /// What the board counts, so the card can name the record in
+    /// words — "Top Score" rather than the board's own terse "easy".
+    /// Nil for a board this build doesn't recognise, which is the one
+    /// case where the card falls back to the old one-line form.
+    var kind: BoardKind?
+    /// Set on weekly score boards only, where the number on the board
+    /// is a sum of three games and reads as a bug without a sentence
+    /// saying so. Apple's own sheet has no room to say it, which is
+    /// half the reason we draw the board ourselves.
+    var boardFootnote: String?
+    /// The leaderboard this card came from, so the sheet's board page
+    /// can go and fetch its rows. A raw id rather than the enum for
+    /// the same reason `BoardStanding` stores one: a card built from a
+    /// cached standing written by an older build must still carry the
+    /// id through, even if this build has no case for it.
+    var boardID: String = ""
+
+    /// The record, named: "All Time Top Score", "This Week's Best
+    /// Streak". Title case and up front, because the card is read by
+    /// someone who has never seen the boards and needs to be told what
+    /// was won before being told the number.
+    var headline: String? {
+        guard let kind else { return nil }
+        let record: String
+        switch kind {
+        case .score:  record = "Top Score"
+        case .streak: record = "Best Streak"
+        case .keep:   record = "Biggest Keep"
+        }
+        return isKahuna ? "All Time \(record)" : "This Week's \(record)"
+    }
+
+    /// "on Easy". Only the score boards have a difficulty to name; the
+    /// streak and keep boards are one board each, already named by the
+    /// headline, and "on Streak" would be a line saying nothing.
+    var difficultyLine: String? {
+        guard kind == .score else { return nil }
+        return "on \(boardName.capitalized)"
+    }
+
+    /// "96 Coins", "5 Wins in a Row". Same words as `scorePhrase`, in
+    /// the title case the rest of the card's claim is set in.
+    var scoreLine: String? {
+        scorePhrase?
+            .split(separator: " ")
+            .map { $0.count > 2 ? $0.capitalized : String($0) }
+            .joined(separator: " ")
+    }
 
     /// Identity for `.sheet(item:)`. The claim itself is the id:
     /// two cards that say the same thing are the same card.
@@ -75,7 +129,7 @@ struct ShareCardSubject: Equatable, Identifiable {
             // The dates are a nicety; a card without them still says
             // which week it was by saying "this week" the way the app
             // does. Better a vaguer card than no card.
-            window = WeeklyBests.weekLabel(for: id, now: now)
+            window = WeeklyBests.weekLabel(for: id)
                 .map { "week of \($0)" } ?? "this week"
         } else {
             window = "all time"
@@ -87,7 +141,18 @@ struct ShareCardSubject: Equatable, Identifiable {
             name: name,
             boardName: standing.boardName,
             windowLine: window,
-            scorePhrase: standing.scorePhrase
+            scorePhrase: standing.scorePhrase,
+            total: standing.total,
+            // The middot form, so the board page's heading is the same
+            // string the splash badge carried: "easy · this week",
+            // "easy · all time". A comma here and a middot there read
+            // as two different labels for one board.
+            boardTitle: standing.contextLine,
+            kind: standing.kind,
+            boardFootnote: standing.isWeekly && standing.weeklyBoard?.kind == .score
+                ? "your best three games this week, added up"
+                : nil,
+            boardID: standing.boardID
         )
     }
 }
@@ -108,16 +173,6 @@ struct ShareCardView: View {
     /// and still a file small enough to send over a bad connection.
     static let size = CGSize(width: 360, height: 450)
 
-    /// The gold mark beside the title: a crown for the week, a pair of
-    /// palms for all time. SF Symbols calls them laurels; on this
-    /// beach they read as palm fronds, which is the better joke.
-    private func mark(_ name: String) -> some View {
-        Image(systemName: name)
-            .font(.system(size: subject.isKahuna ? 26 : 23, weight: .medium))
-            .foregroundStyle(Color.gold)
-            .shadow(color: Color.coinGoldLight.opacity(0.8), radius: 10)
-    }
-
     var body: some View {
         ZStack {
             // The beach sits lower here than it does on a phone. At
@@ -130,20 +185,23 @@ struct ShareCardView: View {
                 // card is for; the wordmark is only there so somebody
                 // who has never seen the game knows what they are
                 // looking at.
-                HStack(spacing: 10) {
-                    ShellMedallion(size: 30)
+                HStack(spacing: 13) {
+                    ShellMedallion(size: 42)
                     Text("Shell Yes")
-                        .font(.custom("Optima", size: 25).weight(.semibold))
+                        .font(.custom("Optima", size: 33).weight(.semibold))
                         .tracking(0.5)
                         .foregroundStyle(Color.ink)
                 }
-                .padding(.top, 34)
+                .padding(.top, 48)
 
                 Spacer(minLength: 0)
 
                 if let name = subject.name {
                     Text(name)
-                        .font(.avenir(27, weight: .demiBold, italic: true))
+                        // Upright, unlike every other line on the card:
+                        // a name is not a caption about the game, and
+                        // the italic made it read as one.
+                        .font(.avenir(27, weight: .demiBold))
                         .tracking(1)
                         .foregroundStyle(Color.ink)
                         .lineLimit(1)
@@ -153,58 +211,77 @@ struct ShareCardView: View {
                         .minimumScaleFactor(0.5)
                         .padding(.horizontal, 36)
                         .padding(.bottom, 16)
+                        // The pill comes after the name in this stack,
+                        // so its rays — which reach well past the
+                        // capsule — paint over the name by default.
+                        // The name wins.
+                        .zIndex(1)
                 }
 
-                // The claim. Same pill as the splash line, at the size
-                // of a thing worth photographing — and held at the top
-                // of its breath, since a still image gets one frame and
-                // may as well have the bright one.
-                HStack(spacing: subject.isKahuna ? 8 : 10) {
-                    mark(subject.isKahuna ? "laurel.leading" : "crown.fill")
+                ClaimBadge(title: subject.title, isKahuna: subject.isKahuna)
 
-                    Text(subject.title)
-                        .font(.avenir(23, weight: .demiBold))
-                        .tracking(3)
-                        .textCase(.uppercase)
-                        .foregroundStyle(Color.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                // What was won, in three short lines instead of one
+                // run-on. "All Time Top Score / on Easy / 96 Coins"
+                // reads top to bottom the way the news actually
+                // arrives: the record, the board, the number. A board
+                // this build doesn't recognise has no record to name,
+                // so it keeps the old single line.
+                if let headline = subject.headline {
+                    VStack(spacing: 5) {
+                        Text(headline)
+                            .font(.avenir(18, weight: .demiBold, italic: true))
+                            .tracking(1.5)
+                            .foregroundStyle(Color.ink.opacity(0.72))
 
-                    if subject.isKahuna { mark("laurel.trailing") }
-                }
-                .padding(.vertical, 14)
-                .padding(.horizontal, 26)
-                .background {
-                    Capsule()
-                        .fill(Color.coinGoldLight.opacity(subject.isKahuna ? 0.44 : 0.30))
-                        .overlay(
-                            Capsule().strokeBorder(
-                                Color.gold.opacity(0.75),
-                                lineWidth: subject.isKahuna ? 2 : 1.5
-                            )
-                        )
-                        .shadow(
-                            color: Color.gold.opacity(subject.isKahuna ? 0.6 : 0.45),
-                            radius: subject.isKahuna ? 26 : 20
-                        )
-                        .shadow(color: Color.pearlGlow.opacity(0.5), radius: 5)
-                }
+                        if let difficulty = subject.difficultyLine {
+                            Text(difficulty)
+                                .font(.avenir(15, weight: .medium, italic: true))
+                                .tracking(1.5)
+                                .foregroundStyle(Color.ink.opacity(0.55))
+                        }
 
-                Text("\(subject.boardName), \(subject.windowLine)")
-                    .font(.avenir(15, weight: .medium, italic: true))
-                    .tracking(1.5)
+                        if let score = subject.scoreLine {
+                            Text(score)
+                                // Same size as the headline above it:
+                                // the record and its number are one
+                                // claim in two lines, and a step in
+                                // type size made the number look like
+                                // a separate, louder thing.
+                                .font(.avenir(18, weight: .demiBold, italic: true))
+                                .tracking(1.5)
+                                .foregroundStyle(Color.ink.opacity(0.72))
+                                .monospacedDigit()
+                                .padding(.top, 2)
+                        }
+
+                        // Weekly cards still name their dates: a card
+                        // outlives the week it was made in, and
+                        // "This Week's" alone stops being true.
+                        if !subject.isKahuna {
+                            Text(subject.windowLine)
+                                .font(.avenir(12, weight: .medium, italic: true))
+                                .tracking(1.5)
+                                .foregroundStyle(Color.ink.opacity(0.45))
+                                .padding(.top, 2)
+                        }
+                    }
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.ink.opacity(0.65))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .padding(.top, 18)
                     .padding(.horizontal, 30)
-
-                if let score = subject.scorePhrase {
-                    Text(score)
-                        .font(.avenir(14, weight: .demiBold, italic: true))
+                    // Holds the claim off the sand line. Without it the
+                    // score and the tagline share one band of space and
+                    // the card reads as two paragraphs run together.
+                    .padding(.bottom, 24)
+                } else {
+                    Text("\(subject.boardName), \(subject.windowLine)")
+                        .font(.avenir(15, weight: .medium, italic: true))
                         .tracking(1.5)
-                        .foregroundStyle(Color.ink.opacity(0.5))
-                        .monospacedDigit()
-                        .padding(.top, 6)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.ink.opacity(0.65))
+                        .padding(.top, 18)
+                        .padding(.horizontal, 30)
                 }
 
                 Spacer(minLength: 0)
@@ -220,7 +297,7 @@ struct ShareCardView: View {
                         .font(.avenir(12, weight: .demiBold, italic: true))
                         .tracking(1)
                         .foregroundStyle(Color.stampText.opacity(0.92))
-                    Text("free on the App Store")
+                    Text("Free on the App Store!")
                         .font(.avenir(11, weight: .medium, italic: true))
                         .tracking(1)
                         .foregroundStyle(Color.stampText.opacity(0.7))
@@ -236,6 +313,91 @@ struct ShareCardView: View {
         // sees first, and it should look like the game rather than
         // like the sender's display settings.
         .environment(\.colorScheme, .light)
+    }
+}
+
+/// The claim pill: a crown and "Top Banana" for the week, palms and
+/// "Big Kahuna" for all time.
+///
+/// Its own view so both tiers are measurably one shape. The tier
+/// differences are colour and mark, never size: a Big Kahuna badge that
+/// came out a few points taller than a Top Banana one read as a
+/// mistake rather than as a rank.
+struct ClaimBadge: View {
+    let title: String
+    let isKahuna: Bool
+
+    /// One line box for both marks, so the taller symbol cannot push
+    /// the capsule open. SF Symbols calls them laurels; on this beach
+    /// they read as palm fronds, which is the better joke.
+    private func mark(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 21, weight: .medium))
+            .foregroundStyle(Color.gold)
+            .frame(width: 21, height: 22)
+            .shadow(color: Color.coinGoldLight.opacity(0.8), radius: 10)
+    }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            mark(isKahuna ? "laurel.leading" : "crown.fill")
+
+            Text(title)
+                .font(.avenir(19, weight: .demiBold))
+                .tracking(3)
+                .textCase(.uppercase)
+                .foregroundStyle(Color.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                // All caps, so the glyphs fill only the top of their
+                // line box and the descender space below parks them
+                // visibly above the capsule's middle. A point and a
+                // half down is what it takes for the eye to read them
+                // as centred.
+                .offset(y: 1.5)
+
+            if isKahuna { mark("laurel.trailing") }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 22)
+        .background {
+            Capsule()
+                .fill(Color.coinGoldLight.opacity(isKahuna ? 0.44 : 0.30))
+                .overlay(
+                    Capsule().strokeBorder(
+                        Color.gold.opacity(0.75),
+                        lineWidth: isKahuna ? 2 : 1.5
+                    )
+                )
+                .shadow(
+                    color: Color.gold.opacity(isKahuna ? 0.6 : 0.45),
+                    radius: isKahuna ? 26 : 20
+                )
+                .shadow(color: Color.pearlGlow.opacity(0.5), radius: 5)
+        }
+        // Rays for the Big Kahuna only. Top of an all-time board is the
+        // rarer of the two crowns and the card should look like it: the
+        // weekly one keeps the plain pill so the difference is visible
+        // at a glance.
+        //
+        // Static, not turning: `ImageRenderer` takes a single frame and
+        // never runs `onAppear`, so the animated form would render as
+        // an empty halo.
+        .background {
+            if isKahuna {
+                LightRays(
+                    rayCount: 12,
+                    innerRadius: 30,
+                    outerRadius: 96,
+                    rayWidth: 20,
+                    maxOpacity: 0.4,
+                    adaptToColorScheme: false,
+                    animates: false,
+                    color: .gold
+                )
+                .allowsHitTesting(false)
+            }
+        }
     }
 }
 

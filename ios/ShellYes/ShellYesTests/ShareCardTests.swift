@@ -145,10 +145,13 @@ final class ShareCardTests: XCTestCase {
 
     func test_weekLabel_namesTheSevenDaysOfTheID() {
         // 2024-W46 is Mon 11 Nov to Sun 17 Nov.
-        let label = WeeklyBests.weekLabel(for: "2024-W46", now: anchor)
+        let label = WeeklyBests.weekLabel(for: "2024-W46")
         XCTAssertNotNil(label)
         XCTAssertTrue(label?.contains("11") == true, "got \(label ?? "nil")")
         XCTAssertTrue(label?.contains("17") == true, "got \(label ?? "nil")")
+        // The year is not optional: a card is read long after the week
+        // it names has passed.
+        XCTAssertTrue(label?.contains("2024") == true, "got \(label ?? "nil")")
     }
 
     func test_weekLabel_refusesNonsense() {

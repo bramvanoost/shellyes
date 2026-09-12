@@ -96,7 +96,7 @@ struct WeeklyBests: Codable, Equatable {
     /// `DateIntervalFormatter` does the joining, so a locale that
     /// writes the month first gets "Sep 8 – 14" rather than a range
     /// assembled in English word order.
-    static func weekLabel(for weekID: String, now: Date = Date()) -> String? {
+    static func weekLabel(for weekID: String) -> String? {
         let parts = weekID.components(separatedBy: "-W")
         guard parts.count == 2,
               let year = Int(parts[0]),
@@ -111,19 +111,20 @@ struct WeeklyBests: Codable, Equatable {
         guard let start = calendar.date(from: components),
               let end = calendar.date(byAdding: .day, value: 6, to: start) else { return nil }
 
-        // The year rides along only when the card is about some other
-        // year than the one it is made in — which is to say almost
-        // never, and exactly when it matters.
-        let currentYear = calendar
-            .dateComponents([.yearForWeekOfYear], from: now)
-            .yearForWeekOfYear
-        let template = (currentYear == year) ? "dMMM" : "dMMMyyyy"
-
         let formatter = DateIntervalFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateTemplate = template
-        return formatter.string(from: start, to: end)
+        formatter.dateTemplate = "dMMM"
+        let days = formatter.string(from: start, to: end)
+
+        // The year always rides along, and it goes on the end by hand.
+        // This label exists to date a share card, and a card outlives
+        // the year it was made in as surely as it outlives the week:
+        // "7–13 Sep" read next September names the wrong seven days.
+        // Asking the interval formatter for the year instead puts it
+        // in front on some locales ("2026 Sep 7–13"), which reads as a
+        // filename rather than a date.
+        return "\(days), \(year)"
     }
 
     /// This week's numbers, or a fresh empty week if `self` belongs to

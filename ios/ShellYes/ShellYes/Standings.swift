@@ -78,6 +78,14 @@ struct BoardStanding: Codable, Equatable, Identifiable {
         }
     }
 
+    /// The board phrase as a centred sub-line: "easy · this week".
+    /// Same words as `boardPhrase`, with the comma traded for a middot
+    /// because the line now sits underneath the title rather than
+    /// running on after it.
+    var contextLine: String {
+        boardPhrase.replacingOccurrences(of: ", ", with: " · ")
+    }
+
     /// "1st", "12th", "23rd" — localized, because English's ordinal
     /// rules are not every language's.
     var ordinal: String {

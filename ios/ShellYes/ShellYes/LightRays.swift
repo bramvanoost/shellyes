@@ -25,6 +25,15 @@ struct LightRays: View {
     /// cream surface (like the shell-claim banner), the dampening
     /// would just wash the rays out.
     var adaptToColorScheme: Bool = true
+    /// Set `false` where there is no time for the halo to arrive or
+    /// turn: the share card is rendered by `ImageRenderer`, which
+    /// takes one frame and never fires `onAppear`, so animated rays
+    /// would come out of it as nothing at all.
+    var animates: Bool = true
+    /// The light itself. Cream-gold reads as a glow on the darker
+    /// surfaces this started on; on a pale sunset sky it disappears,
+    /// so the share card asks for the deeper gold instead.
+    var color: Color = .coinGoldLight
 
     @Environment(\.colorScheme) private var colorScheme
     @SwiftUI.State private var visible: Bool = false
@@ -49,9 +58,9 @@ struct LightRays: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.coinGoldLight.opacity(0.0),
-                                Color.coinGoldLight.opacity(effectiveMaxOpacity),
-                                Color.coinGoldLight.opacity(0.0)
+                                color.opacity(0.0),
+                                color.opacity(effectiveMaxOpacity),
+                                color.opacity(0.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
@@ -68,8 +77,9 @@ struct LightRays: View {
         // sub-pixel softness that simulator compositing provides
         // doesn't survive on-device), so soften them with a real blur.
         .blur(radius: 1.6)
-        .opacity(visible ? 1 : 0)
+        .opacity(animates ? (visible ? 1 : 0) : 1)
         .onAppear {
+            guard animates else { return }
             withAnimation(.easeOut(duration: 0.55)) {
                 visible = true
             }
