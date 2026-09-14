@@ -18,7 +18,7 @@ struct WhatsNewCard: View {
             // screen. It also does the work of telling the player the
             // splash is still there underneath and nothing has moved.
             Color.treasureInk
-                .opacity(entered ? 0.42 : 0)
+                .opacity(entered ? 0.55 : 0)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {
@@ -56,8 +56,17 @@ struct WhatsNewCard: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 22)
             .background(
+                // Opaque, unlike the glass `cardSurface` the tally
+                // cards wear. Those sit on open sand; this one sits on
+                // top of the splash's logo and buttons, and at 70%
+                // white the words NEW GAME read straight through the
+                // middle of the news.
                 RoundedRectangle(cornerRadius: 18)
-                    .fill(Color.cardSurface)
+                    .fill(Color.paper)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color.white.opacity(0.35))
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
