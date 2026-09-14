@@ -111,6 +111,23 @@ struct ShellYesApp: App {
             // the next app_closed's duration_seconds drop to 0). We
             // debounce: ignore any `.active` that fires within 2s of
             // the previous one.
+            // The catch-up cannot wait for `.active` alone. GameKit
+            // answers its authenticate handler asynchronously, and on a
+            // cold launch it is still unanswered when the scene turns
+            // active — so the call below no-ops on the guard and the
+            // backfill does not happen until the player backgrounds the
+            // app and comes back. Nothing is lost when that happens
+            // (`didBackfill` is only written after a real run), but a
+            // player who updates, opens the app and looks straight at
+            // Achievements sees an empty screen they had earned.
+            //
+            // Watching the flag covers the other order too: when auth
+            // lands first, `.active` still fires and finds the guard
+            // already satisfied. Both paths are idempotent.
+            .onChange(of: GameCenter.shared.isAuthenticated) { _, signedIn in
+                guard signedIn else { return }
+                GameCenter.shared.backfillIfNeeded(from: stats)
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {
                 case .active:
