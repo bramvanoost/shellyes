@@ -12,6 +12,18 @@ import UIKit
 /// actually asks for Game Center by tapping Leaderboards or
 /// Achievements in Settings. A game whose pitch is calm does not open
 /// with a modal.
+extension BoardScope {
+    /// The GameKit term for the same idea. The mapping lives here so
+    /// `BoardScope` itself stays importable by views that have no
+    /// business knowing GameKit exists.
+    var playerScope: GKLeaderboard.PlayerScope {
+        switch self {
+        case .everyone: return .global
+        case .friends: return .friendsOnly
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class GameCenter {
@@ -290,13 +302,26 @@ final class GameCenter {
     /// Returns empty rather than throwing, like every other read here.
     /// The board page has an empty state and it is a better outcome
     /// than an error in front of somebody who just won something.
-    func loadBoardRows(for boardID: String, top: Int = 8) async -> [BoardRow] {
-        guard isAuthenticated, !boardID.isEmpty else { return [] }
+    /// `scope` picks the crowd: everybody, or the player's Game Center
+    /// friends. The friends read is deliberately ungated — GameKit has
+    /// required `loadFriendsAuthorizationStatus` for friend *identity*
+    /// since iOS 14.5, but whether `.friendsOnly` needs that grant to
+    /// return rows is not documented either way, and asking for the
+    /// grant is a real cost to spend on a guess. So it is asked for
+    /// without one, and `board_scope_viewed` in the dashboard answers
+    /// the question with real accounts. If it comes back empty for
+    /// everybody, the grant is the next thing to try.
+    func loadBoardRows(
+        for boardID: String,
+        top: Int = 8,
+        scope: BoardScope = .everyone
+    ) async -> BoardPage {
+        guard isAuthenticated, !boardID.isEmpty else { return .empty }
         do {
             let boards = try await GKLeaderboard.loadLeaderboards(IDs: [boardID])
-            guard let board = boards.first else { return [] }
-            let (localEntry, entries, _) = try await board.loadEntries(
-                for: .global,
+            guard let board = boards.first else { return .empty }
+            let (localEntry, entries, total) = try await board.loadEntries(
+                for: scope.playerScope,
                 timeScope: .allTime,
                 range: NSRange(location: 1, length: top)
             )
@@ -319,13 +344,13 @@ final class GameCenter {
                     )
                 )
             }
-            return rows.sorted { $0.rank < $1.rank }
+            return BoardPage(rows: rows.sorted { $0.rank < $1.rank }, total: total)
         } catch {
             #if DEBUG
             print("[GameCenter] board load failed: \(error.localizedDescription)")
             #endif
             trackFailure("gamecenter_board_failed", error: error)
-            return []
+            return .empty
         }
     }
 

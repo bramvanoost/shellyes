@@ -35,13 +35,34 @@ struct ShareCardSheet: View {
     /// pass would be paid for in a stutter as the sheet slides up.
     @SwiftUI.State private var card: ShareCardImage?
 
-    /// The board page's rows, and whether they are still coming. The
-    /// two are separate because an empty board and a board that has
-    /// not answered yet are different pieces of news, and saying "no
-    /// scores yet" to somebody who is on the board would be a lie held
-    /// for as long as the network takes.
-    @SwiftUI.State private var rows: [BoardRow] = []
-    @SwiftUI.State private var isLoadingRows = true
+    /// Which crowd the board page is reading: everybody, or the
+    /// player's Game Center friends.
+    @SwiftUI.State private var scope: BoardScope = .everyone
+
+    /// One fetched board per scope, kept so a player swinging between
+    /// the two words pays for each read once. A missing entry means
+    /// "not asked yet", which is why this is a dictionary of optionals
+    /// rather than two arrays: an empty board and a board that has not
+    /// answered yet are different pieces of news, and saying "no scores
+    /// yet" to somebody who is on the board would be a lie held for as
+    /// long as the network takes.
+    @SwiftUI.State private var pages: [BoardScope: BoardPage] = [:]
+
+    /// Scopes already counted, so `board_scope_viewed` is once per
+    /// scope per sheet however often the toggle is tapped.
+    @SwiftUI.State private var trackedScopes: Set<BoardScope> = []
+
+    private var page: BoardPage? { pages[scope] }
+
+    /// The denominator. A global board falls back to the cached
+    /// standing's total, which is what it always used and is only ever
+    /// minutes stale; a friends board has no cached number to fall back
+    /// on and uses what the fetch returned.
+    private var total: Int {
+        guard let page else { return scope == .everyone ? subject.total : 0 }
+        if page.total > 0 { return page.total }
+        return scope == .everyone ? subject.total : 0
+    }
 
     /// So the card page counts once per sheet however often somebody
     /// swings between the two pages.
@@ -168,8 +189,8 @@ struct ShareCardSheet: View {
         .task {
             card = ShareCardRenderer.render(subject)
         }
-        .task {
-            await loadRows()
+        .task(id: scope) {
+            await loadRows(for: scope)
         }
         }
     }
@@ -183,15 +204,18 @@ struct ShareCardSheet: View {
 
             BoardCard(
                 title: subject.boardTitle,
-                rows: rows,
-                total: subject.total,
+                rows: page?.rows ?? [],
+                total: total,
+                scope: scope,
                 footnote: subject.boardFootnote,
-                isLoading: isLoadingRows,
+                isLoading: page == nil,
                 onOpenGameCenter: {
                     dismiss()
                     onSeeBoard()
                 }
             )
+
+            scopeToggle
 
             Spacer(minLength: 0)
 
@@ -214,6 +238,48 @@ struct ShareCardSheet: View {
         .padding(.horizontal, 24)
         .padding(.top, 24)
         .padding(.bottom, 8)
+    }
+
+    /// Two words under the board. Not a segmented control: this is a
+    /// change of view, not a setting, and the board it belongs to is
+    /// drawn in the app's own hand rather than the system's.
+    ///
+    /// It shows whatever the scope returns, including nothing —
+    /// "no friends on this board yet" is an honest answer and the only
+    /// one available until enough accounts have read it to say whether
+    /// GameKit hands friends over ungated at all.
+    private var scopeToggle: some View {
+        HStack(spacing: 6) {
+            ForEach(BoardScope.allCases) { option in
+                let selected = option == scope
+                Button {
+                    guard !selected else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { scope = option }
+                } label: {
+                    Text(option.label)
+                        .font(.avenir(12, weight: selected ? .demiBold : .medium, italic: true))
+                        .tracking(1.5)
+                        .foregroundStyle(Color.ink.opacity(selected ? 0.85 : 0.45))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(selected ? Color.paper.opacity(0.75) : Color.clear)
+                        )
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    Color.ink.opacity(selected ? 0.25 : 0),
+                                    lineWidth: 1
+                                )
+                        )
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+            }
+        }
+        .padding(.top, 12)
     }
 
     // -------------------------------------------- page two: the card
@@ -329,15 +395,33 @@ struct ShareCardSheet: View {
     /// one, while this needs eight rows from a single board, and
     /// asking for all of them up front would be five larger round
     /// trips for a page most launches never open.
-    private func loadRows() async {
+    private func loadRows(for scope: BoardScope) async {
+        // Already fetched this sheet: the toggle is a redraw, not a
+        // second round trip.
+        guard pages[scope] == nil else { return }
         #if DEBUG
         if ScreenshotMode.seedsBoardRows {
-            rows = BoardCard.mockRows(me: GameCenter.shared.playerFirstName)
-            isLoadingRows = false
+            let rows = BoardCard.mockRows(me: GameCenter.shared.playerFirstName)
+            pages[scope] = BoardPage(
+                rows: scope == .friends ? Array(rows.prefix(4)) : rows,
+                total: scope == .friends ? 4 : subject.total
+            )
             return
         }
         #endif
-        rows = await GameCenter.shared.loadBoardRows(for: subject.boardID)
-        isLoadingRows = false
+        let fetched = await GameCenter.shared.loadBoardRows(
+            for: subject.boardID,
+            scope: scope
+        )
+        pages[scope] = fetched
+        guard trackedScopes.insert(scope).inserted else { return }
+        // The experiment: does `.friendsOnly` return anything without
+        // the friends-authorization grant? `rows` against `scope` in
+        // the dashboard is the answer.
+        Telemetry.shared.track("board_scope_viewed", props: [
+            "scope": scope.rawValue,
+            "rows": fetched.rows.count,
+            "total": fetched.total,
+        ])
     }
 }

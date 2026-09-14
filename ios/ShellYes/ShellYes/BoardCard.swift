@@ -14,6 +14,55 @@ struct BoardRow: Identifiable, Equatable {
     var id: Int { rank }
 }
 
+/// A board as the app reads it: the rows worth drawing, and how many
+/// players the board holds in total so a rank has a denominator.
+struct BoardPage: Equatable {
+    let rows: [BoardRow]
+    let total: Int
+
+    /// Nothing to draw. Every failure in `GameCenter` lands here rather
+    /// than throwing, because the card has an empty state and it is a
+    /// better outcome than an error in front of somebody who just won
+    /// something.
+    static let empty = BoardPage(rows: [], total: 0)
+}
+
+/// Which players a board reads. Ours rather than GameKit's, so every
+/// view above this line stays free of GameKit.
+enum BoardScope: String, CaseIterable, Identifiable {
+    /// Everybody who has ever posted a score.
+    case everyone
+    /// The player's Game Center friends, and themselves.
+    case friends
+
+    var id: String { rawValue }
+
+    /// The word on the toggle.
+    var label: String {
+        switch self {
+        case .everyone: return "everyone"
+        case .friends: return "friends"
+        }
+    }
+
+    /// What the denominator counts.
+    func denominator(_ total: Int) -> String {
+        switch self {
+        case .everyone: return "of \(total) players"
+        case .friends: return total == 1 ? "of 1 friend" : "of \(total) friends"
+        }
+    }
+
+    /// What an empty board means, which is a different thing per scope:
+    /// nobody has played, against nobody you know has.
+    var emptyMessage: String {
+        switch self {
+        case .everyone: return "no scores on this board yet."
+        case .friends: return "no friends on this board yet."
+        }
+    }
+}
+
 /// The board, drawn in our own look.
 ///
 /// Apple's `GKGameCenterViewController` cannot be a card: it is a
@@ -33,6 +82,9 @@ struct BoardCard: View {
     /// How many players are on the board at all, so a rank has a
     /// denominator.
     let total: Int
+    /// Which players the rows came from. Decides the denominator's
+    /// wording and what an empty board is taken to mean.
+    var scope: BoardScope = .everyone
     /// Set on weekly score boards, where the number needs explaining.
     var footnote: String?
     /// True while the rows are still on their way. Held apart from an
@@ -58,7 +110,7 @@ struct BoardCard: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
             } else if rows.isEmpty {
-                Text("no scores on this board yet.")
+                Text(scope.emptyMessage)
                     .font(.avenir(13, weight: .medium, italic: true))
                     .foregroundStyle(Color.ink.opacity(0.55))
                     .frame(maxWidth: .infinity)
@@ -73,7 +125,7 @@ struct BoardCard: View {
             }
 
             VStack(spacing: 6) {
-                Text("of \(total) players")
+                Text(scope.denominator(total))
                     .font(.avenir(12, weight: .medium, italic: true))
                     .foregroundStyle(Color.ink.opacity(0.5))
 
