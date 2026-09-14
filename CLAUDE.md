@@ -59,7 +59,8 @@ Renderer uses the alternate screen buffer (`\x1b[?1049h`/`l`) and writes a fixed
 
 1. Solo vs AI + local pass-and-play (free multiplayer, no backend).
 2. Same engine on a server (PartyKit/Colyseus or a Pi over ssh). Server owns RNG. Disconnect -> AI takes the seat.
-3. Accounts/leaderboards only if retention justifies it.
+3. Android. A third engine (Kotlin) joining `parity/`, not a rewrite -- this is what engine purity was for. Decide the shell separately from the engine: native Compose, or reuse `src/engine.ts` through a JS runtime. Cross-play needs step 2 first, which is why it sits here.
+4. Accounts/leaderboards only if retention justifies it.
 
 ## Conventions
 
