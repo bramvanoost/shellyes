@@ -229,7 +229,7 @@ struct SettingsView: View {
             AboutSheet()
         }
         .sheet(isPresented: $showExplainer) {
-            ExplainerView(from: "settings")
+            ExplainerView(from: "settings", gamesPlayed: stats.gamesPlayed)
         }
         .gameCenterEntry(gameCenter)
         .alert("Start a new game?", isPresented: $showRestartConfirm) {

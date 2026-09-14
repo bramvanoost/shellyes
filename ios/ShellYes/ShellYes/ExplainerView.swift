@@ -4,6 +4,13 @@ struct ExplainerView: View {
     /// Which door the sheet was opened from: `"home"` or `"settings"`.
     let from: String
 
+    /// Lifetime games behind the player when they opened the rules.
+    /// From 1.2 the home row retires at two finished games, so this is
+    /// the check on that call: if players with a real history start
+    /// arriving here `from = "settings"`, they went looking for
+    /// something the splash stopped offering.
+    var gamesPlayed: Int = 0
+
     @Environment(\.dismiss) private var dismiss
     @SwiftUI.State private var currentPage: Int = 0
     /// Highest page reached, not the page left on. A player who reads
@@ -107,7 +114,10 @@ struct ExplainerView: View {
         // button, because a swipe-down dismiss is the common exit and
         // never touches that button.
         .onAppear {
-            Telemetry.shared.track("explainer_opened", props: ["from": from])
+            Telemetry.shared.track("explainer_opened", props: [
+                "from": from,
+                "games_played": gamesPlayed,
+            ])
         }
         .onChange(of: currentPage) { _, page in
             furthestPage = max(furthestPage, page)
@@ -115,6 +125,7 @@ struct ExplainerView: View {
         .onDisappear {
             Telemetry.shared.track("explainer_closed", props: [
                 "from": from,
+                "games_played": gamesPlayed,
                 "furthest_page": furthestPage + 1,
                 "pages": pages.count,
                 "finished": furthestPage == pages.count - 1,

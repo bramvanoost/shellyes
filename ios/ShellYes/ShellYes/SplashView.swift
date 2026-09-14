@@ -358,7 +358,7 @@ struct SplashView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExplainer) {
-            ExplainerView(from: "home")
+            ExplainerView(from: "home", gamesPlayed: stats.gamesPlayed)
         }
         .sheet(item: $shareSubject) { subject in
             ShareCardSheet(subject: subject) {
