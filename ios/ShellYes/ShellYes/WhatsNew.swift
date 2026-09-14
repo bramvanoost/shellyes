@@ -33,11 +33,10 @@ final class WhatsNew {
             version: "1.2",
             title: "new this wave",
             lines: [
-                "Five weekly boards, reset every Monday.",
-                "Your standing on the beach, on the home screen.",
-                "Hold a number one and you can send the card to anyone.",
-                "Read any board as your friends only, or as everyone.",
-                "Achievements, showing everything you have already earned.",
+                "Game Center! Leaderboards! Achievements! Omg!",
+                "Five weekly leaderboards, reset each Monday!",
+                "Your standing on the beach is now on your homescreen",
+                "Global stats or among your friends",
             ]
         ),
     ]
