@@ -39,6 +39,23 @@ struct SplashView: View {
     /// whether tapping one reaches Apple's sheet or our empty one.
     private var hasPlayed: Bool { stats.gamesPlayed > 0 }
 
+    /// Where a signed-in player reads their standings, a signed-out one
+    /// reads nothing at all. This line fills that slot.
+    ///
+    /// It waits for a finished game, the way the Game Center entries
+    /// already distinguish `hasPlayed`: it is the one thing on this
+    /// screen that asks the player for something, and a first run
+    /// should not be asking anybody to sign into anything.
+    private var showsSignInLine: Bool {
+        guard hasPlayed, !GameCenter.shared.isAuthenticated else { return false }
+        #if DEBUG
+        // Captures seed standings without an account; the line would
+        // sit under them in every screenshot.
+        if ScreenshotMode.isActive { return false }
+        #endif
+        return true
+    }
+
     private var creditAttributed: AttributedString {
         let raw = "Background music by [Alfarran Basalim](https://pixabay.com/users/farran_ez-45967570/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=456148) from [Pixabay](https://pixabay.com/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=456148)."
         return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
@@ -181,6 +198,23 @@ struct SplashView: View {
                             .buttonStyle(.plain)
                             .transition(.opacity)
                         }
+
+                        if showsSignInLine {
+                            Button {
+                                gameCenter.signIn(from: .home)
+                            } label: {
+                                Text("Sign in to Game Center to take a rank")
+                                    // The size of a middling standing,
+                                    // because that is what it stands in
+                                    // for. An invitation, not a banner.
+                                    .font(.avenir(12, weight: .demiBold, italic: true))
+                                    .tracking(1.5)
+                                    .multilineTextAlignment(.center)
+                                    .foregroundStyle(Color.ink.opacity(0.55))
+                            }
+                            .buttonStyle(.plain)
+                            .transition(.opacity)
+                        }
                     }
                     .frame(maxWidth: 280)
                     // On top of the stack's own 18pt. The badges are
@@ -231,6 +265,16 @@ struct SplashView: View {
                 }
                 .animation(.easeOut(duration: 0.4), value: standings.standings)
                 .animation(.easeOut(duration: 0.3), value: showsHowToPlay)
+                .animation(.easeOut(duration: 0.4), value: showsSignInLine)
+                // An ask being spent, so it is counted. Fires when the
+                // line turns up rather than on every return to the
+                // splash, which makes it a floor — see TELEMETRY.md.
+                .onChange(of: showsSignInLine, initial: true) { _, shows in
+                    guard shows else { return }
+                    Telemetry.shared.track("gamecenter_sign_in_shown", props: [
+                        "from": GameCenterEntry.Source.home.rawValue,
+                    ])
+                }
                 .animation(.easeOut(duration: 0.4), value: GameCenter.shared.playerName)
                 .opacity(actionsVisible ? 1 : 0)
                 .offset(y: actionsVisible ? 0 : 12)

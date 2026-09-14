@@ -113,6 +113,25 @@ final class GameCenterEntry {
             "outcome": outcome,
         ])
     }
+
+    /// The splash's sign-in line, for a player who has finished a game
+    /// and is signed out. No pane is involved — there is nothing of
+    /// ours to show, only Apple's sheet or the same dead end `open`
+    /// falls back to.
+    func signIn(from source: Source) {
+        lastSource = source
+        let outcome: String
+        if GameCenter.shared.presentSignInFromKeyWindow() {
+            outcome = "sign_in"
+        } else {
+            showsUnavailableAlert = true
+            outcome = "unavailable"
+        }
+        Telemetry.shared.track("gamecenter_sign_in_tapped", props: [
+            "from": source.rawValue,
+            "outcome": outcome,
+        ])
+    }
 }
 
 extension View {
