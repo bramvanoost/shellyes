@@ -34,6 +34,10 @@ struct SplashView: View {
     private var showsHowToPlay: Bool {
         #if DEBUG
         if debugHidesHowToPlay { return false }
+        // A capture run shares one install across its tests, so a
+        // finished game in an earlier test would take the row away
+        // from the screenshot that is about it.
+        if ScreenshotMode.isActive { return true }
         #endif
         return stats.gamesPlayed < 2
     }
