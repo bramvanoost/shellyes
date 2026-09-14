@@ -363,25 +363,40 @@ final class GameCenter {
             return gk
         }
         GKAchievement.report(reports) { [weak self] error in
-            guard let error else { return }
-            #if DEBUG
-            print("[GameCenter] achievement report failed: \(error.localizedDescription)")
-            #endif
+            if let error {
+                #if DEBUG
+                print("[GameCenter] achievement report failed: \(error.localizedDescription)")
+                #endif
+                Task { @MainActor in
+                    self?.trackFailure(
+                        "gamecenter_report_failed",
+                        error: error,
+                        extra: ["count": reports.count]
+                    )
+                }
+                return
+            }
             Task { @MainActor in
-                self?.trackFailure(
-                    "gamecenter_report_failed",
-                    error: error,
-                    extra: ["count": reports.count]
-                )
+                self?.trackUnlocks(achievements, source: source)
             }
         }
-        trackUnlocks(achievements, source: source)
     }
 
-    /// Fires once per achievement per install. Re-reports are silent,
-    /// so the event counts earnings rather than reports; a reinstall
-    /// starts the bookkeeping over, which under-counts rather than
-    /// inflates.
+    /// Fires once per achievement per install, and only once Game
+    /// Center has accepted the report.
+    ///
+    /// Until 1.2 this ran alongside `report` rather than inside its
+    /// completion, so the event recorded what the app believed rather
+    /// than what Game Center stored — which is why the 1.1 numbers are
+    /// unreadable (the achievements were never live, so every report
+    /// had nothing to land on). Hanging it off the success path makes
+    /// `achievement_unlocked` mean exactly one thing: Game Center took
+    /// it. Failures stay visible through `gamecenter_report_failed`.
+    ///
+    /// A failed report also leaves the bookkeeping untouched, so the
+    /// achievement fires properly whenever it does land. Re-reports are
+    /// silent to GameKit, and a reinstall starts the bookkeeping over,
+    /// so this under-counts rather than inflates.
     private func trackUnlocks(_ achievements: Set<Achievement>, source: String) {
         var seen = Set(defaults.stringArray(forKey: Key.reported) ?? [])
         let fresh = achievements.filter { !seen.contains($0.rawValue) }
@@ -395,6 +410,19 @@ final class GameCenter {
             seen.insert(achievement.rawValue)
         }
         defaults.set(Array(seen), forKey: Key.reported)
+
+        // 1.2 owes every existing player their whole history at once,
+        // so a backfill can fire fourteen of the events above in a
+        // burst. This is the one line to read on the dashboard: how
+        // much each catch-up actually caught. A zero-count backfill
+        // never reaches here, which is what you want — the interesting
+        // population is players who were owed something.
+        if source == "backfill" {
+            Telemetry.shared.track("achievement_backfill", props: [
+                "count": fresh.count,
+                "reported": achievements.count,
+            ])
+        }
     }
 
     // MARK: - The two things the app actually calls
