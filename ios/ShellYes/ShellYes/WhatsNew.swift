@@ -102,5 +102,10 @@ final class WhatsNew {
     func debugReset() {
         defaults.removeObject(forKey: Key.lastSeenVersion)
     }
+
+    /// This version's note, whatever the bookkeeping says. The ladybug
+    /// menu shows the card there and then rather than leaving somebody
+    /// to quit and relaunch to see what they just reset.
+    func debugNote() -> Note? { noteForCurrentVersion }
     #endif
 }

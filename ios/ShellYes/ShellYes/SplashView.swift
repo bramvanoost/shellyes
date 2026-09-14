@@ -329,7 +329,14 @@ struct SplashView: View {
             if !ScreenshotMode.isActive {
                 SplashDebugMenu(
                     standings: standings,
-                    hidesHowToPlay: $debugHidesHowToPlay
+                    hidesHowToPlay: $debugHidesHowToPlay,
+                    onShowWhatsNew: {
+                        WhatsNew.shared.debugReset()
+                        guard let note = WhatsNew.shared.debugNote() else { return }
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            whatsNewNote = note
+                        }
+                    }
                 )
             }
             #endif
@@ -657,6 +664,10 @@ private struct QuietLabel: View {
 private struct SplashDebugMenu: View {
     let standings: StandingsStore
     @Binding var hidesHowToPlay: Bool
+    /// Clears the bookkeeping and puts the card straight up, so the
+    /// menu shows what it just reset instead of promising it for the
+    /// next launch.
+    let onShowWhatsNew: () -> Void
 
     var body: some View {
         Menu {
@@ -688,9 +699,7 @@ private struct SplashDebugMenu: View {
                 DifficultyNudge.shared.debugReset()
                 DifficultyNudge.debugForce = false
             }
-            Button("Reset what's new", systemImage: "sparkles") {
-                WhatsNew.shared.debugReset()
-            }
+            Button("Show what's new", systemImage: "sparkles", action: onShowWhatsNew)
         } label: {
             Image(systemName: "ladybug.fill")
                 .font(.system(size: 18))
