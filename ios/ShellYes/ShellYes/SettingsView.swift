@@ -126,7 +126,7 @@ struct SettingsView: View {
 
                     glassCard {
                         SettingsSection(title: "appearance") {
-                            SettingsRow(title: "Color mode") {
+                            SettingsRow(title: "Colour mode") {
                                 StampSegmented(
                                     selection: Binding(
                                         get: { settings.colorMode },
