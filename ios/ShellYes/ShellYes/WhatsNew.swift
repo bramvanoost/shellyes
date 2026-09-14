@@ -36,6 +36,7 @@ final class WhatsNew {
                 "Five weekly boards, reset every Monday.",
                 "Your standing on the beach, on the home screen.",
                 "Hold a number one and you can send the card to anyone.",
+                "Read any board as your friends only, or as everyone.",
                 "Achievements, showing everything you have already earned.",
             ]
         ),
