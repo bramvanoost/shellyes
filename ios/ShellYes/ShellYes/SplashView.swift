@@ -15,6 +15,10 @@ struct SplashView: View {
     /// The card a tapped crown opens, or nil when no card is up.
     @SwiftUI.State private var shareSubject: ShareCardSubject?
 
+    /// The news this update brings, once per version, or nil when
+    /// there is none to tell.
+    @SwiftUI.State private var whatsNewNote: WhatsNew.Note?
+
     #if DEBUG
     /// Set from the ladybug menu, so the splash can be looked at with
     /// the How to Play button out of the way — the one row on this
@@ -326,6 +330,21 @@ struct SplashView: View {
             }
             #endif
         }
+        // Over everything, including the debug menu: it is the one
+        // thing on this screen that has to be dealt with before the
+        // screen is, and a modal with a ladybug on top of it is a
+        // screenshot waiting to go wrong.
+        .overlay {
+            if let note = whatsNewNote {
+                WhatsNewCard(note: note, reducedMotion: settings.reducedMotion) {
+                    withAnimation(.easeOut(duration: 0.25)) { whatsNewNote = nil }
+                    Telemetry.shared.track("whats_new_dismissed", props: [
+                        "version": note.version,
+                    ])
+                }
+                .transition(.opacity)
+            }
+        }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExplainer) {
             ExplainerView(from: "home")
@@ -356,6 +375,20 @@ struct SplashView: View {
                 }
             }
             #endif
+            // Once per version, and never over a capture run. The
+            // check writes as well as reads, so a second appearance of
+            // this screen finds nothing left to show.
+            var tellsTheNews = true
+            #if DEBUG
+            if ScreenshotMode.isActive { tellsTheNews = false }
+            #endif
+            if tellsTheNews, whatsNewNote == nil,
+               let note = WhatsNew.shared.noteOnLaunch(gamesPlayed: stats.gamesPlayed) {
+                whatsNewNote = note
+                Telemetry.shared.track("whats_new_shown", props: [
+                    "version": note.version,
+                ])
+            }
             // Ranks refresh every time the splash appears, which is
             // also every time a finished game lands back here — so the
             // score just submitted is the one being placed.
@@ -650,6 +683,9 @@ private struct SplashDebugMenu: View {
             Button("Reset difficulty nudge", systemImage: "arrow.counterclockwise") {
                 DifficultyNudge.shared.debugReset()
                 DifficultyNudge.debugForce = false
+            }
+            Button("Reset what's new", systemImage: "sparkles") {
+                WhatsNew.shared.debugReset()
             }
         } label: {
             Image(systemName: "ladybug.fill")
