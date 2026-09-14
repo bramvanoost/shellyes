@@ -22,14 +22,16 @@ struct SplashView: View {
     @SwiftUI.State private var debugHidesHowToPlay = false
     #endif
 
-    /// Always true in a shipped build; only the debug menu can say
-    /// otherwise.
+    /// The row is for somebody who has not played. Two finished games
+    /// in, it is clutter, so it goes — and because this reads the
+    /// lifetime counter `StatsStore` already keeps, a player with forty
+    /// games behind them loses it the first time they open this build.
+    /// The rules stay reachable from Settings.
     private var showsHowToPlay: Bool {
         #if DEBUG
-        return !debugHidesHowToPlay
-        #else
-        return true
+        if debugHidesHowToPlay { return false }
         #endif
+        return stats.gamesPlayed < 2
     }
 
     /// False until a game has been finished. It no longer decides
