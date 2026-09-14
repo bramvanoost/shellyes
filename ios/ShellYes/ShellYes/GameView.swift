@@ -363,6 +363,7 @@ struct GameView: View {
     /// here rather than only at the end, so a player who abandons
     /// still tells us what they chose.
     private func trackGameStarted(from source: String) {
+        store.noteGameStarted()
         Telemetry.shared.track("game_started", props: [
             "from": source,
             "difficulty": settings.difficulty.rawValue,

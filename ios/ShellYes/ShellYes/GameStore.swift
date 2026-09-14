@@ -42,6 +42,19 @@ final class GameStore {
     private var rng: Mulberry32
     private let settings: SettingsStore
 
+    /// Context for `game_abandoned`, so a rage quit is distinguishable
+    /// from a phone call. Score and shells alone could not tell the
+    /// two apart: quitting seconds after a bust and quitting two
+    /// minutes after a bank looked identical.
+    ///
+    /// The clock starts when the game does — `noteGameStarted()`, called
+    /// from the same place `game_started` fires — not when the store is
+    /// built, which for the first game of a session would otherwise
+    /// bill however long the player sat on the splash.
+    @ObservationIgnored private var gameStartedAt = Date()
+    @ObservationIgnored private var turnsTaken = 0
+    @ObservationIgnored private var lastTurnOutcome = "none"
+
     /// Pool the two AI seats draw from on each new game. Uppercase so
     /// the existing `.capitalized` display calls (Scoreboard, banners)
     /// render them as title-case. Mellow first names, mixed gender, no
@@ -154,7 +167,37 @@ final class GameStore {
     }
 
     func apply(_ action: Action) {
+        let old = state
         state = step(state: state, action: action, rng: &rng)
+        noteTurnOutcome(from: old)
+    }
+
+    /// Keeps just enough history for `game_abandoned` to say how the
+    /// game was going when it was thrown away. `apply` is the single
+    /// funnel for every state change, human and AI alike, so this sees
+    /// all of them.
+    ///
+    /// Only turn-ending outcomes count. A pick or a roll is mid-turn
+    /// and says nothing about how the game is going.
+    private func noteTurnOutcome(from old: State) {
+        let turnEnded = state.current != old.current || state.phase == .over
+        guard turnEnded else { return }
+        turnsTaken += 1
+
+        let seat = old.current
+        let gained = state.players[seat].tiles.count > old.players[seat].tiles.count
+        let humanLostAShell = state.players[Self.humanSeat].tiles.count
+            < old.players[Self.humanSeat].tiles.count
+
+        if seat == Self.humanSeat {
+            // A human bank and a human steal both grow the stack; only
+            // a bust shrinks it. Either way the player did it to
+            // themselves, which is the distinction that matters when
+            // reading a quit.
+            lastTurnOutcome = gained ? "bank" : "bust"
+        } else {
+            lastTurnOutcome = humanLostAShell ? "stolen_from" : "ai_turn"
+        }
     }
 
     private static let aiPaceNanoseconds: UInt64 = 300_000_000
@@ -302,11 +345,23 @@ final class GameStore {
             "my_shells": state.players[Self.humanSeat].tiles.count,
             "shells_left": state.centerTiles.count,
             "difficulty": settings.difficulty.rawValue,
+            "seconds_in": Int(Date().timeIntervalSince(gameStartedAt)),
+            "turns": turnsTaken,
+            "last_event": lastTurnOutcome,
         ])
+    }
+
+    /// Starts the abandonment clock. Called wherever `game_started`
+    /// fires, so the two events describe the same stretch of time.
+    func noteGameStarted() {
+        gameStartedAt = Date()
+        turnsTaken = 0
+        lastTurnOutcome = "none"
     }
 
     func newGame() {
         reportAbandonedGame()
+        noteGameStarted()
         rng = Mulberry32(seed: UInt32.random(in: 1...UInt32.max))
         state = initialState(playerIds: Self.freshPlayerIds())
         aiEvent = nil
