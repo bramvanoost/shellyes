@@ -5,11 +5,36 @@ import ShellYesEngine
 enum Difficulty: String, Codable, CaseIterable {
     case easy, normal, hard
 
-    var modifier: Double {
+    /// Discipline for each AI seat, as `[seat 1, seat 2]`.
+    ///
+    /// This replaces a single `modifier` that shifted both seats by
+    /// ±0.15 off one base. That model could not work, and shipped
+    /// broken in 1.2: `ai.ts` / `AI.swift` derive ambition from
+    /// `round(4 - discipline * 3.5)`, which quantises the knob into
+    /// three bands (≤0.357 holds out for 3-coin shells, ≤0.786 banks
+    /// 2-coin, above that banks anything). A ±0.15 nudge mostly lands
+    /// inside one band and changes nothing, and where it does cross a
+    /// boundary it crosses only one.
+    ///
+    /// Worse, strength is not monotone in discipline at a three-seat
+    /// table. Holding out pays when there are two rivals to steal from,
+    /// so the middle band outscores the top one. Easy's seat 2 sat at
+    /// 0.70 and Normal's at 0.85 — which made Easy's opponent the
+    /// *stronger* of the two. Measured over 20,000 games: Easy won
+    /// 38.2% of the time against Normal's 39.7%. Easy was harder.
+    ///
+    /// These pairs are tuned against Bram's targets — roughly 60 / 50 /
+    /// 40 percent human win rate — and verified monotone at low, mid
+    /// and high player skill rather than at one assumed skill. 40,000
+    /// games per cell, mid-skill column: 59.3 / 51.5 / 41.1.
+    ///
+    /// Re-tune with `sim/difficulty.ts`, not by nudging a number and
+    /// hoping. A pair that reads as "weaker" often is not.
+    var seatDiscipline: [Double] {
         switch self {
-        case .easy: return -0.15
-        case .normal: return 0
-        case .hard: return 0.15
+        case .easy:   return [0.00, 0.00]
+        case .normal: return [0.20, 0.00]
+        case .hard:   return [0.20, 0.50]
         }
     }
 }
@@ -21,9 +46,11 @@ final class GameStore {
     static let jonesSeat = 1
     static let bot03Seat = 2
 
-    private let baseDiscipline: [Int: Double] = [
-        jonesSeat: 0.30,
-        bot03Seat: 0.85,
+    /// Which entry of `Difficulty.seatDiscipline` each AI seat reads.
+    /// The human sits at 0, so the two AI seats are 1 and 2.
+    private static let disciplineIndex: [Int: Int] = [
+        jonesSeat: 0,
+        bot03Seat: 1,
     ]
 
     enum AIEvent: Equatable {
@@ -55,6 +82,11 @@ final class GameStore {
     @ObservationIgnored private var turnsTaken = 0
     @ObservationIgnored private var lastTurnOutcome = "none"
 
+    /// Whether this game has already been written to `AbandonGuard`.
+    /// In memory rather than read back from defaults, so the common
+    /// path — every action after the first — doesn't touch disk.
+    @ObservationIgnored private var hasArmedAbandonGuard = false
+
     /// Pool the two AI seats draw from on each new game. Uppercase so
     /// the existing `.capitalized` display calls (Scoreboard, banners)
     /// render them as title-case. Mellow first names, mixed gender, no
@@ -69,14 +101,40 @@ final class GameStore {
         return ["YOU", shuffled[0], shuffled[1]]
     }
 
-    init(seed: UInt32, settings: SettingsStore) {
+    /// Optional so previews and unit tests can build a store without
+    /// dragging a stats file in. A store without one still plays a
+    /// correct game; it just can't file the loss when a game is thrown
+    /// away, which is not a thing either of those does.
+    private let stats: StatsStore?
+
+    /// Injectable so tests can arm and disarm without writing to the
+    /// player's real defaults.
+    private let abandonGuard: AbandonGuard
+
+    init(
+        seed: UInt32,
+        settings: SettingsStore,
+        stats: StatsStore? = nil,
+        abandonGuard: AbandonGuard = .shared
+    ) {
         self.rng = Mulberry32(seed: seed)
         self.settings = settings
+        self.stats = stats
+        self.abandonGuard = abandonGuard
         self.state = initialState(playerIds: Self.freshPlayerIds())
     }
 
-    convenience init(settings: SettingsStore) {
-        self.init(seed: UInt32.random(in: 1...UInt32.max), settings: settings)
+    convenience init(
+        settings: SettingsStore,
+        stats: StatsStore? = nil,
+        abandonGuard: AbandonGuard = .shared
+    ) {
+        self.init(
+            seed: UInt32.random(in: 1...UInt32.max),
+            settings: settings,
+            stats: stats,
+            abandonGuard: abandonGuard
+        )
     }
 
     var scores: [Int] { score(state) }
@@ -161,15 +219,36 @@ final class GameStore {
 
     var currentAIDifficulty: ShellYesEngine.Difficulty? {
         guard !isHumanTurn else { return nil }
-        let base = baseDiscipline[state.current] ?? 0.5
-        let adjusted = max(0, min(1, base + settings.difficulty.modifier))
-        return ShellYesEngine.Difficulty(discipline: adjusted)
+        let seats = settings.difficulty.seatDiscipline
+        // An unknown seat falls to the middle of the range rather than
+        // crashing, the way `Leaderboard.score(forDifficulty:)` does:
+        // a third AI added later should play a plausible game, not take
+        // the app down before its entry exists.
+        guard let index = Self.disciplineIndex[state.current],
+              seats.indices.contains(index)
+        else { return ShellYesEngine.Difficulty(discipline: 0.5) }
+        return ShellYesEngine.Difficulty(discipline: seats[index])
     }
 
     func apply(_ action: Action) {
         let old = state
         state = step(state: state, action: action, rng: &rng)
         noteTurnOutcome(from: old)
+
+        // The first action of a game is what makes it a game. Arm here
+        // rather than at the deal, so opening New Game and backing out
+        // without rolling costs nothing — and disarm the moment it ends
+        // properly, so a finished game is never charged twice.
+        if state.phase == .over {
+            hasArmedAbandonGuard = false
+            abandonGuard.disarm()
+        } else if !hasArmedAbandonGuard {
+            hasArmedAbandonGuard = true
+            abandonGuard.arm(
+                difficulty: settings.difficulty.rawValue,
+                pace: settings.gameSpeed.rawValue
+            )
+        }
     }
 
     /// Keeps just enough history for `game_abandoned` to say how the
@@ -334,6 +413,35 @@ final class GameStore {
     /// tally all land here. A game nobody has touched is not an
     /// abandonment, and a finished one is a `game_ended`, so both are
     /// filtered out.
+    /// Charges a game the player is walking out of, as the loss it is.
+    ///
+    /// Separate from `reportAbandonedGame` because the two ask
+    /// different questions and the wrong one was nearly used for both.
+    /// Telemetry asks "was this game *interesting* enough to report" —
+    /// its `touched` bar wants a claimed shell or a disturbed beach.
+    /// This asks "did the player act", which is a lower bar and the
+    /// only correct one here: rolling once, seeing a bad roll and
+    /// tapping Home claims nothing and disturbs nothing, and is exactly
+    /// the quit the fix exists to charge for.
+    ///
+    /// Gated on `hasArmedAbandonGuard`, so it matches the launch-time
+    /// path in `ShellYesApp` charge for charge. Walking out through
+    /// Home has to cost the same as force-quitting or the cheaper
+    /// version of the exploit stays free.
+    ///
+    /// Filed now rather than at the next launch because the game is
+    /// being discarded here and the guard is about to be re-armed for
+    /// its replacement.
+    private func chargeAbandonedGame() {
+        guard state.phase != .over, hasArmedAbandonGuard else { return }
+        stats?.recordAbandonedGame(
+            difficulty: settings.difficulty.rawValue,
+            pace: settings.gameSpeed.rawValue
+        )
+        hasArmedAbandonGuard = false
+        abandonGuard.disarm()
+    }
+
     private func reportAbandonedGame() {
         guard state.phase != .over else { return }
         let claimed = state.players.reduce(0) { $0 + $1.tiles.count }
@@ -360,6 +468,11 @@ final class GameStore {
     }
 
     func newGame() {
+        // Charge first, report second: the report reads `turnsTaken`
+        // and the live state, and charging doesn't touch either, but
+        // the order is the one that reads correctly — the game is lost,
+        // then the loss is described.
+        chargeAbandonedGame()
         reportAbandonedGame()
         noteGameStarted()
         rng = Mulberry32(seed: UInt32.random(in: 1...UInt32.max))

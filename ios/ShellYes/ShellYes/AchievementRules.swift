@@ -55,12 +55,34 @@ enum AchievementRules {
         return out
     }
 
-    /// Everything earnable from lifetime totals alone. Used on first
-    /// sign-in so a player upgrading from 1.0.1 arrives with the
-    /// achievements their history already deserves. The per-game ones
-    /// can't be recovered — that history was never recorded.
-    static func backfill(lifetime: LifetimeTotals) -> Set<Achievement> {
+    /// Everything earnable from a stored history. Used on first sign-in
+    /// so a player upgrading arrives with the achievements they already
+    /// deserve.
+    ///
+    /// `bestRuns` is optional because the lifetime half of this is also
+    /// the floor of `unlocked(after:lifetime:)`, which is scoring a
+    /// single game and has no business reading the archive.
+    ///
+    /// Most per-game achievements still can't be recovered: `cleanWin`,
+    /// `lastShell`, `steal3`, `bust3` and `bookends` all turn on facts
+    /// about a game that were never written down. `busts` and `steals`
+    /// are stored as lifetime totals only, so "three in one game" is not
+    /// answerable from them — and guessing would hand out an
+    /// achievement nobody earned, which is worse than a locked one.
+    static func backfill(
+        lifetime: LifetimeTotals,
+        bestRuns: [ScoreRecord] = []
+    ) -> Set<Achievement> {
         var out: Set<Achievement> = []
+
+        // The two that survive in `bestRuns`, which keeps each run's
+        // difficulty, score and whether it was won.
+        if bestRuns.contains(where: { $0.won && $0.difficulty == "hard" }) {
+            out.insert(.hardWin)
+        }
+        if bestRuns.contains(where: { $0.won && $0.score < 10 }) {
+            out.insert(.squeaker)
+        }
 
         if lifetime.wins >= 1 { out.insert(.firstWin) }
         if lifetime.bestStreak >= 5 { out.insert(.streak5) }

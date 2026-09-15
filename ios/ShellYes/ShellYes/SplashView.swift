@@ -181,7 +181,7 @@ struct SplashView: View {
                         // would be absurd. The exception is a held
                         // number one, which is the best thing about the
                         // account and is promoted below.
-                        ForEach(standings.weekly) { standing in
+                        ForEach(standings.splashRanks) { standing in
                             Button {
                                 tap(standing)
                             } label: {
@@ -194,7 +194,7 @@ struct SplashView: View {
                             .transition(.opacity)
                         }
 
-                        if let crown = standings.allTimeCrown {
+                        if let crown = standings.splashCrown {
                             Button {
                                 tap(crown)
                             } label: {

@@ -326,13 +326,16 @@ struct ShareCardSheet: View {
 
                 VStack(spacing: 14) {
                     if let card {
+                        // No `message:`. Adding text alongside the card
+                        // makes the payload image-plus-text, and Photos
+                        // drops "Save Image" from the sheet unless every
+                        // item is an image. `subject:` is safe — it is
+                        // metadata for the destination (a mail subject
+                        // line), not a second item in the payload. See
+                        // `AppLink` for where the store link went.
                         ShareLink(
                             item: card,
                             subject: Text(subject.message),
-                            // The link rides in the message rather than
-                            // on the picture, so it is tappable
-                            // wherever the card ends up.
-                            message: Text("\(subject.message) \(AppLink.appStore.absoluteString)"),
                             preview: SharePreview(
                                 subject.message,
                                 image: Image(uiImage: card.image)

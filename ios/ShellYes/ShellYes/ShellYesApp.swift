@@ -13,8 +13,9 @@ struct ShellYesApp: App {
     init() {
         let s = SettingsStore()
         _settings = .init(initialValue: s)
-        _store = .init(initialValue: GameStore(settings: s))
-        _stats = .init(initialValue: StatsStore())
+        let st = StatsStore()
+        _stats = .init(initialValue: st)
+        _store = .init(initialValue: GameStore(settings: s, stats: st))
         // Last known ranks load from the cache here so the splash can
         // draw the standing on its first frame; the live refresh
         // happens when that screen appears.
@@ -26,6 +27,28 @@ struct ShellYesApp: App {
         // is a public identifier (like a Stripe publishable key);
         // safe to ship in the binary.
         Telemetry.shared.initialize(appKey: "A-SH-7882093279")
+        // A game still running when the app went away is a game the
+        // player walked out of, and it is charged as a loss here — on
+        // this launch, before the splash, the boards or the
+        // achievements read the stats, so they all see the corrected
+        // streak rather than a stale one. See `AbandonGuard`.
+        //
+        // After `Telemetry.initialize`, or the event below would be
+        // raised against a client that doesn't exist yet and dropped.
+        // Before `GameCenter.authenticate`, so the backfill and the
+        // rank refresh that follow a successful sign-in are reading
+        // stats that already include this loss.
+        if let abandoned = AbandonGuard.shared.armedGame {
+            st.recordAbandonedGame(
+                difficulty: abandoned.difficulty,
+                pace: abandoned.pace
+            )
+            AbandonGuard.shared.disarm()
+            Telemetry.shared.track("game_abandoned_on_quit", props: [
+                "difficulty": abandoned.difficulty,
+                "pace": abandoned.pace,
+            ])
+        }
         // Silent: if the player isn't signed in, GameKit hands us a
         // sheet and we hold it until they tap Leaderboards themselves.
         GameCenter.shared.authenticate()
@@ -127,6 +150,20 @@ struct ShellYesApp: App {
             .onChange(of: GameCenter.shared.isAuthenticated) { _, signedIn in
                 guard signedIn else { return }
                 GameCenter.shared.backfillIfNeeded(from: stats)
+                // Ranks need the same hook, for the same reason. The
+                // splash asks for them from its `.task`, which on a
+                // cold launch runs while GameKit is still deciding who
+                // the player is — so `loadStandings` returns nothing on
+                // its `isAuthenticated` guard, and `.task` never fires
+                // again to ask a second time. A signed-in player was
+                // left looking at a splash with no rank on it until
+                // they backgrounded the app and came back.
+                //
+                // Ordered after the backfill deliberately: that call
+                // is what puts a lapsed player's history onto the
+                // boards, and this one is what reads a rank back off
+                // them.
+                Task { await standings.refresh() }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 switch newPhase {

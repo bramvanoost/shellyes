@@ -39,6 +39,17 @@ final class WhatsNew {
                 "Global stats or among your friends",
             ]
         ),
+        Note(
+            version: "1.3",
+            title: "new this wave",
+            lines: [
+                "Easy is properly easy now. It wasn't. Sorry.",
+                "Your rank turns up on the homescreen again",
+                "Old games now count towards achievements",
+                "Walking out of a game counts as a loss",
+                "Save your crown card straight to Photos",
+            ]
+        ),
     ]
 
     private enum Key {

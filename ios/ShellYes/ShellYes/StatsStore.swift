@@ -193,6 +193,30 @@ final class StatsStore {
 
     /// `date` is injectable so tests can file records on known days
     /// without waiting for the calendar to cooperate.
+    /// A game the player walked out of, filed as the loss it is.
+    ///
+    /// Without this, quitting was strictly better than losing: the
+    /// streak survived, and the weekly best-of-three pool only ever saw
+    /// the games that went well. See `AbandonGuard`.
+    ///
+    /// Deliberately narrower than `recordGameOver`. It counts the game
+    /// and breaks the streak, and stops there:
+    ///
+    /// - no `wins`, obviously.
+    /// - no `bestScore` and no `fileRun`. A walked-out game has a
+    ///   partial score, and a personal best is a claim about a game
+    ///   that was actually finished.
+    /// - no weekly score. Same reason, and it is the pool the quitting
+    ///   was gaming in the first place.
+    /// - `bestStreak` is untouched, because a streak that just ended
+    ///   can only have been recorded at its own high-water mark.
+    func recordAbandonedGame(difficulty: String, pace: String) {
+        gamesPlayed += 1
+        winStreak = 0
+        gamesByDifficulty[difficulty, default: 0] += 1
+        gamesByPace[pace, default: 0] += 1
+    }
+
     func recordGameOver(
         humanWon: Bool,
         humanScore: Int,

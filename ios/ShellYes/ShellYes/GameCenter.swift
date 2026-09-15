@@ -60,7 +60,20 @@ final class GameCenter {
     /// from 1.0.1.
     @ObservationIgnored private let defaults: UserDefaults
     private enum Key {
+        /// Version 1's guard. Still read so a player who has already
+        /// had it is not walked through the score submissions twice,
+        /// but it no longer gates the run on its own — see `didBackfillV2`.
         static let didBackfill = "gamecenter.didBackfill"
+        /// Version 2's guard, added when the backfill learned to grant
+        /// `hardWin` and `squeaker` off `bestRuns`.
+        ///
+        /// A second key rather than a cleared first one: everyone who
+        /// installed 1.2 already has `didBackfill` set, so reusing it
+        /// would mean the two new achievements never reached a single
+        /// existing player — the exact group the backfill exists for.
+        /// Each new version of the rules needs its own key for the same
+        /// reason.
+        static let didBackfillV2 = "gamecenter.didBackfill.v2"
         /// Telemetry bookkeeping only. GameKit treats a re-report of an
         /// earned achievement as a no-op, which is why the app keeps no
         /// state for it — but without this, every later win would
@@ -462,23 +475,37 @@ final class GameCenter {
     /// board would hand a player a rank they did not earn in the
     /// occurrence it lands in.
     func backfillIfNeeded(from stats: StatsStore) {
-        guard isAuthenticated, !defaults.bool(forKey: Key.didBackfill) else { return }
+        guard isAuthenticated, !defaults.bool(forKey: Key.didBackfillV2) else { return }
 
-        for run in stats.bestRuns {
-            submit(run.score, to: Leaderboard.score(forDifficulty: run.difficulty))
+        // Scores only on the first run. A player who already had the 1.2
+        // backfill has these on the boards, and every board here takes
+        // the best value rather than the latest, so re-submitting would
+        // be noise rather than harm — but it is still five round trips
+        // to tell Game Center something it already knows.
+        if !defaults.bool(forKey: Key.didBackfill) {
+            for run in stats.bestRuns {
+                submit(run.score, to: Leaderboard.score(forDifficulty: run.difficulty))
+            }
+            submit(stats.bestStreak, to: Leaderboard.bestStreak)
+            submit(stats.biggestKeep, to: Leaderboard.biggestKeep)
+            defaults.set(true, forKey: Key.didBackfill)
         }
-        submit(stats.bestStreak, to: Leaderboard.bestStreak)
-        submit(stats.biggestKeep, to: Leaderboard.biggestKeep)
 
+        // Achievements run every time the rules learn something new.
+        // Re-reporting an earned one is a no-op to GameKit, and
+        // `trackUnlocks` keeps the telemetry from double-counting.
         report(
-            AchievementRules.backfill(lifetime: LifetimeTotals(
-                gamesPlayed: stats.gamesPlayed,
-                wins: stats.wins,
-                bestStreak: stats.bestStreak
-            )),
+            AchievementRules.backfill(
+                lifetime: LifetimeTotals(
+                    gamesPlayed: stats.gamesPlayed,
+                    wins: stats.wins,
+                    bestStreak: stats.bestStreak
+                ),
+                bestRuns: stats.bestRuns
+            ),
             source: "backfill"
         )
 
-        defaults.set(true, forKey: Key.didBackfill)
+        defaults.set(true, forKey: Key.didBackfillV2)
     }
 }

@@ -26,6 +26,14 @@ final class GameStoreTests: XCTestCase {
         GameStore(seed: seed, settings: SettingsStore())
     }
 
+    /// A guard backed by its own suite, so arming in a test never
+    /// reaches the defaults the app reads at launch.
+    private func freshGuard(_ name: String = UUID().uuidString) -> AbandonGuard {
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return AbandonGuard(defaults: defaults)
+    }
+
     func test_init_setsUpThreePlayersHumanTurnRollPhase() {
         let store = makeStore(seed: 1)
         XCTAssertEqual(store.state.players.count, 3)
@@ -90,11 +98,43 @@ final class GameStoreTests: XCTestCase {
         XCTAssertEqual(store.state.players.count, 3)
     }
 
-    func test_difficulty_modifierTable() {
-        XCTAssertEqual(Difficulty.easy.modifier, -0.15, accuracy: 0.0001)
-        XCTAssertEqual(Difficulty.normal.modifier, 0, accuracy: 0.0001)
-        XCTAssertEqual(Difficulty.hard.modifier, 0.15, accuracy: 0.0001)
+    func test_difficulty_seatDisciplineTable() {
+        XCTAssertEqual(Difficulty.easy.seatDiscipline, [0.00, 0.00])
+        XCTAssertEqual(Difficulty.normal.seatDiscipline, [0.20, 0.00])
+        XCTAssertEqual(Difficulty.hard.seatDiscipline, [0.20, 0.50])
         XCTAssertEqual(Difficulty.allCases, [.easy, .normal, .hard])
+    }
+
+    /// Every difficulty has to describe both AI seats. A short table
+    /// would silently drop a seat to the 0.5 fallback, which plays a
+    /// perfectly good game at the wrong difficulty — the kind of bug
+    /// that only shows up as "easy feels hard".
+    func test_difficulty_everyTierCoversBothAISeats() {
+        for difficulty in Difficulty.allCases {
+            XCTAssertEqual(
+                difficulty.seatDiscipline.count, 2,
+                "\(difficulty.rawValue) must give a discipline for both AI seats"
+            )
+        }
+    }
+
+    /// No seat may get *more* disciplined as the game gets easier.
+    ///
+    /// This does not prove Easy is easier — strength is not monotone in
+    /// discipline at a three-seat table, which is exactly how 1.2
+    /// shipped an Easy that was harder than Normal. `npm run
+    /// sim:difficulty` is what proves that, over 20,000 games a tier.
+    /// This is the cheap guard that catches a typo'd table.
+    func test_difficulty_disciplineNeverFallsAsTheGameGetsHarder() {
+        let ladder = [Difficulty.easy, .normal, .hard].map(\.seatDiscipline)
+        for seat in 0..<2 {
+            for tier in 1..<ladder.count {
+                XCTAssertGreaterThanOrEqual(
+                    ladder[tier][seat], ladder[tier - 1][seat],
+                    "seat \(seat) gets softer between tier \(tier - 1) and \(tier)"
+                )
+            }
+        }
     }
 
     func test_phaseHint_byPhaseAndSeat() {
@@ -163,5 +203,96 @@ final class GameStoreTests: XCTestCase {
         store.setStateForTesting(s)
         XCTAssertFalse(store.isStealOpportunity)
         XCTAssertEqual(store.bankActionLabel, "Choose…")
+    }
+
+    // MARK: - Abandon guard
+
+    /// Dealing a game is not playing one. A player who opens New Game
+    /// and backs straight out has not quit anything.
+    func test_abandonGuard_isNotArmedUntilThePlayerActs() {
+        let guarded = freshGuard()
+        _ = GameStore(seed: 1, settings: SettingsStore(), abandonGuard: guarded)
+        XCTAssertNil(guarded.armedGame)
+    }
+
+    func test_abandonGuard_armsOnTheFirstAction() {
+        let guarded = freshGuard()
+        let settings = SettingsStore()
+        settings.difficulty = .hard
+        let store = GameStore(seed: 1, settings: settings, abandonGuard: guarded)
+
+        store.apply(.roll)
+
+        XCTAssertEqual(guarded.armedGame?.difficulty, "hard")
+    }
+
+    /// A game played to the end is not an abandonment, and must not be
+    /// charged as one on the next launch.
+    func test_abandonGuard_disarmsWhenTheGameEndsProperly() {
+        let guarded = freshGuard()
+        let store = GameStore(seed: 1, settings: SettingsStore(), abandonGuard: guarded)
+
+        var safetyLimit = 5000
+        while !store.isOver && safetyLimit > 0 {
+            store.apply(decide(state: store.state, ai: ShellYesEngine.Difficulty(discipline: 0.5)))
+            safetyLimit -= 1
+        }
+
+        XCTAssertTrue(store.isOver)
+        XCTAssertNil(guarded.armedGame)
+    }
+
+    /// Walking out through Home or New Game costs the same as
+    /// force-quitting: the loss is filed there and then, and the guard
+    /// is cleared so the next launch doesn't charge for it twice.
+    ///
+    /// One roll and out, deliberately. That claims no shell and leaves
+    /// the beach full, which is below the bar `game_abandoned` uses to
+    /// decide a quit is worth *reporting* — and it is precisely the
+    /// quit this fix has to charge for. Sharing that bar let "roll
+    /// badly, tap Home" stay free while force-quitting was punished.
+    func test_newGame_filesTheLossForAGameInProgress() {
+        let guarded = freshGuard()
+        let name = UUID().uuidString
+        let statsDefaults = UserDefaults(suiteName: name)!
+        statsDefaults.removePersistentDomain(forName: name)
+        let stats = StatsStore(defaults: statsDefaults)
+        stats.recordGameOver(
+            humanWon: true, humanScore: 20,
+            difficulty: "normal", pace: "normal"
+        )
+        XCTAssertEqual(stats.winStreak, 1)
+
+        let store = GameStore(
+            seed: 1, settings: SettingsStore(), stats: stats, abandonGuard: guarded
+        )
+        store.apply(.roll)
+        store.newGame()
+
+        XCTAssertEqual(stats.winStreak, 0)
+        XCTAssertEqual(stats.gamesPlayed, 2)
+        XCTAssertNil(guarded.armedGame)
+    }
+
+    /// The bar for charging a quit is the same bar `reportAbandonedGame`
+    /// uses for reporting one: a game nobody touched is neither.
+    func test_newGame_doesNotFileALossForAnUntouchedGame() {
+        let guarded = freshGuard()
+        let name = UUID().uuidString
+        let statsDefaults = UserDefaults(suiteName: name)!
+        statsDefaults.removePersistentDomain(forName: name)
+        let stats = StatsStore(defaults: statsDefaults)
+        stats.recordGameOver(
+            humanWon: true, humanScore: 20,
+            difficulty: "normal", pace: "normal"
+        )
+
+        let store = GameStore(
+            seed: 1, settings: SettingsStore(), stats: stats, abandonGuard: guarded
+        )
+        store.newGame()
+
+        XCTAssertEqual(stats.winStreak, 1)
+        XCTAssertEqual(stats.gamesPlayed, 1)
     }
 }

@@ -201,12 +201,95 @@ final class AchievementRulesTests: XCTestCase {
         XCTAssertTrue(out.isEmpty)
     }
 
-    /// Every achievement the backfill can return must be marked
-    /// lifetime, and vice versa. Guards the two lists from drifting.
+    /// Every achievement the backfill can return *from totals alone*
+    /// must be marked lifetime, and vice versa. Guards the two lists
+    /// from drifting.
+    ///
+    /// Passing no runs is the point: `isLifetime` means "earnable from
+    /// lifetime totals", and the two achievements the archive can also
+    /// recover are deliberately not in that set.
     func test_backfillMatchesTheLifetimeFlag() {
         let generous = AchievementRules.backfill(
             lifetime: lifetime(gamesPlayed: 1000, wins: 1000, bestStreak: 1000)
         )
         XCTAssertEqual(generous, Set(Achievement.allCases.filter(\.isLifetime)))
+    }
+
+    // MARK: - Backfill from stored runs
+
+    private func run(
+        score: Int = 20,
+        difficulty: String = "normal",
+        won: Bool = true
+    ) -> ScoreRecord {
+        ScoreRecord(
+            score: score,
+            date: Date(timeIntervalSince1970: 1_700_000_000),
+            difficulty: difficulty,
+            pace: "normal",
+            won: won
+        )
+    }
+
+    func test_backfill_recoversHardWinFromAStoredRun() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(),
+            bestRuns: [run(difficulty: "hard", won: true)]
+        )
+        XCTAssertTrue(out.contains(.hardWin))
+    }
+
+    /// A hard game that was *lost* is not a hard win. The archive keeps
+    /// both, so the rule has to read `won` and not just the difficulty.
+    func test_backfill_doesNotGrantHardWinForALostHardGame() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(),
+            bestRuns: [run(difficulty: "hard", won: false)]
+        )
+        XCTAssertFalse(out.contains(.hardWin))
+    }
+
+    func test_backfill_recoversSqueakerFromALowScoringWin() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(),
+            bestRuns: [run(score: 9, won: true)]
+        )
+        XCTAssertTrue(out.contains(.squeaker))
+    }
+
+    func test_backfill_doesNotGrantSqueakerAtTenOrAbove() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(),
+            bestRuns: [run(score: 10, won: true)]
+        )
+        XCTAssertFalse(out.contains(.squeaker))
+    }
+
+    /// The per-game achievements that were never recorded stay locked,
+    /// however generous the history. Guessing at them would hand out
+    /// something nobody earned.
+    func test_backfill_neverInventsUnrecordableAchievements() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(gamesPlayed: 1000, wins: 1000, bestStreak: 1000),
+            bestRuns: [
+                run(score: 4, difficulty: "hard", won: true),
+                run(score: 40, difficulty: "easy", won: true),
+            ]
+        )
+        XCTAssertFalse(out.contains(.cleanWin))
+        XCTAssertFalse(out.contains(.lastShell))
+        XCTAssertFalse(out.contains(.steal3))
+        XCTAssertFalse(out.contains(.bust3))
+        XCTAssertFalse(out.contains(.bookends))
+    }
+
+    /// A fresh install has an empty archive, and an empty archive
+    /// unlocks nothing — the backfill must not fire on first launch.
+    func test_backfill_grantsNothingForAFreshInstallWithNoRuns() {
+        let out = AchievementRules.backfill(
+            lifetime: lifetime(gamesPlayed: 0, wins: 0, bestStreak: 0),
+            bestRuns: []
+        )
+        XCTAssertTrue(out.isEmpty)
     }
 }

@@ -2,9 +2,21 @@ import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Where the app lives on the store. Travels in the share sheet's
-/// message rather than being drawn on the card: a URL inside an image
-/// is a thing to retype, a URL in the message is a thing to tap.
+/// Where the app lives on the store.
+///
+/// It used to ride in the share sheet's `message:`, which made it
+/// tappable wherever the card landed. That had a price nobody spotted
+/// until someone tried to keep their own card: a payload of image *plus*
+/// text is not all-images, and Photos only offers "Save Image" when
+/// every item is an image. So the link cost the player the one thing
+/// they wanted to do with a picture of their own rank.
+///
+/// The link is off the share sheet now. Discovery rests on the card
+/// art, which says "Shell Yes" and "Free on the App Store!" — a name to
+/// search rather than a link to tap. If sharing stops converting, a QR
+/// code or a short link drawn onto the card is the next thing to try;
+/// putting the URL back in `message:` is not, because it silently takes
+/// Save Image away again.
 enum AppLink {
     static let appStore = URL(string: "https://apps.apple.com/app/id6805609705")!
 }
@@ -422,6 +434,13 @@ struct ShareCardImage: Transferable {
             return data
         }
         .suggestedFileName { $0.filename }
+
+        // Raw `Data` alone reaches the share sheet as a *file*, so the
+        // only place it can be saved to is Files. Photos wants an image
+        // object. Vending one as well is what puts "Save Image" in the
+        // sheet, and costs nothing: the data representation is still
+        // first, so anything that prefers a named PNG still gets one.
+        ProxyRepresentation { Image(uiImage: $0.image) }
     }
 }
 

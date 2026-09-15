@@ -51,6 +51,14 @@ struct GameView: View {
     /// number snaps to 0 while the fake dice are still tumbling — the
     /// player sees their total wiped before they're told they busted.
     @SwiftUI.State private var bustFrozenSetAside: [Face]? = nil
+    /// And freeze every vault, because a bust returns the player's top
+    /// shell to the sand the instant `apply` returns. Without this the
+    /// shell vanishes off their stack a full `rollBustVisualDelay`
+    /// before the banner says why — the bust is given away by the
+    /// thing it costs, while the dice are still in the air. Same
+    /// spoiler the four freezes above exist to prevent, on the one
+    /// piece of state that reads as a punishment.
+    @SwiftUI.State private var bustFrozenPlayers: [Player]? = nil
     private let bustHoldSeconds: Double = 8.0
     /// How long the fake post-bust roll stays on screen before the
     /// flash takes over. Matches the dice animation duration roughly.
@@ -147,6 +155,10 @@ struct GameView: View {
     /// sparkle + insertion transition fires when the staging clears,
     /// after the victim's smoke poof has had time to land.
     private var displayedPlayers: [Player] {
+        // The bust freeze wins: it is holding back a loss the player has
+        // not been told about yet, and no steal can be staged inside
+        // that window anyway.
+        if let frozen = bustFrozenPlayers { return frozen }
         guard let seat = stealArrivalSeat else { return store.state.players }
         var players = store.state.players
         guard players.indices.contains(seat), !players[seat].tiles.isEmpty else {
@@ -187,6 +199,7 @@ struct GameView: View {
         // they don't update ahead of the bust banner.
         let beforeCurrent = store.state.current
         let beforePhaseHint = store.phaseHint
+        let beforePlayers = store.state.players
 
         store.apply(action)
 
@@ -242,6 +255,7 @@ struct GameView: View {
                     bustFrozenCurrent = beforeCurrent
                     bustFrozenPhaseHint = beforePhaseHint
                     bustFrozenSetAside = beforeSetAside
+                    bustFrozenPlayers = beforePlayers
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: rollBustVisualDelayNs)
                         triggerBustFlash()
@@ -250,6 +264,7 @@ struct GameView: View {
                         bustFrozenCurrent = nil
                         bustFrozenPhaseHint = nil
                         bustFrozenSetAside = nil
+                        bustFrozenPlayers = nil
                     }
                 } else {
                     triggerBustFlash()
@@ -939,7 +954,16 @@ struct GameView: View {
         // so the player never gets to read "X claimed the last shell."
         // `bustFlash` is gated too so a bust that burns the last supply
         // tile gets its full "Oh, shell no" moment before the tally.
-        .fullScreenCover(isPresented: .constant(store.isOver && store.aiEvent == nil && !bustFlash)) {
+        // `bustAnimatedRoll` has to be gated alongside it: the flash is
+        // only raised *after* the fake roll finishes, so on its own
+        // `bustFlash` is still false while the dice are in the air and
+        // the tally would cover the roll and the banner both.
+        .fullScreenCover(
+            isPresented: .constant(
+                store.isOver && store.aiEvent == nil
+                    && !bustFlash && bustAnimatedRoll == nil
+            )
+        ) {
             CountingCeremony(
                 players: store.state.players,
                 scores: store.scores,

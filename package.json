@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "sim": "tsx sim/regression.ts",
+    "sim:difficulty": "tsx sim/difficulty.ts",
     "ching": "tsx src/launcher.ts",
     "daemon": "tsx src/net/daemon.ts",
     "play": "tsx src/cli.ts",

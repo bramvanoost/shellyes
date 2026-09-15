@@ -31,13 +31,20 @@ A push-your-luck dice game. Collect coins, bank them as tiles, steal rivals' til
 
 - `npm test` green.
 - Regression: 200-game AI-vs-AI sim terminates cleanly AND higher discipline beats lower discipline over the sample (proves AI tiers aren't cosmetic).
+- `npm run sim:difficulty` green if you touched `Difficulty.seatDiscipline`, the AI, or anything that moves scoring. Proves each tier is harder than the one below it at every player skill. The two-seat regression above structurally cannot catch this — see the Easy-was-harder note below.
 - No `Math.random`/`Date` references inside `engine.ts`, `ai.ts` or `odds.ts`.
 - `node parity/diff.mjs` green (needs `swift build --package-path ios/ShellYesEngine --product shellyes-parity` first).
+- iOS: `xcodebuild test -scheme ShellYes -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:ShellYesTests`.
 
 ## Non-obvious decisions (read before relitigating)
 
 ### `discipline` is inverted from "risk"
 Higher discipline = harder AI = stops earlier and banks any reachable tile. Lower discipline = greedy, holds out for 4-coin tiles, busts trying. In CHING (with the burn-on-bust rule), banking reliably accumulates more total coins than chasing 33-36. Empirically: discipline 0.8 beats 0.2 over 200 games (~104 vs 81). The knob name reads slightly inverted on purpose; do not rename back to "risk" without reversing the semantics.
+
+### AI strength is NOT monotone in discipline at three seats
+The line above holds head to head. At the app's three-seat table it does not: holding out for big shells pays when there are two rivals to steal from, so the middle ambition band outscores the top one. 1.2 shipped an Easy whose second AI seat was *stronger* than Normal's because of this — Easy won 38.2% against Normal's 39.7% over 20,000 games.
+
+Two consequences. Ambition is quantised — `round(4 - discipline * 3.5)` gives three bands (≤0.357, ≤0.786, above), so small nudges often change nothing at all. And "lower discipline" cannot be assumed to mean "weaker opponent". Tune `Difficulty.seatDiscipline` with `npm run sim:difficulty` and read the number; do not reason about it.
 
 ### Bust burns the highest center tile (Heckmeck flip)
 "Return your top tile" alone caused 153/200 sim games to stalemate, tiles cycling in and out of the center forever. The burn rule is what makes the supply monotonically deplete. Do not remove it unless you add another depletion mechanism, and update CLAUDE.md if you do.

@@ -1,3 +1,120 @@
+# 1.3 — Difficulty retune, quit penalty, rank fallback — 2026-09-15
+
+Scope: iOS app (`ios/ShellYes/ShellYes/*.swift`) plus a new tuning sim
+(`sim/difficulty.ts`). Six fixes off a play-test triage. No engine or
+rules changes — `src/engine.ts`, `src/ai.ts` and both Swift engine
+mirrors are untouched, and parity still passes 4/4.
+
+## Easy was harder than Normal
+
+`Difficulty.modifier` shifted both AI seats by ±0.15 off one base. That
+model could not work. The AI derives ambition from
+`round(4 - discipline * 3.5)`, which quantises the knob into three
+bands, so a ±0.15 nudge usually lands inside one band and changes
+nothing at all.
+
+Worse, strength is not monotone in discipline at a three-seat table:
+holding out for big shells pays when there are two rivals to steal
+from, so the middle band outscores the top one. Easy's second seat sat
+at 0.70 and Normal's at 0.85, which made **Easy's opponent the stronger
+of the two**. Measured over 20,000 games: Easy won 38.2% against
+Normal's 39.7%.
+
+Replaced with a per-seat table per difficulty, tuned to roughly
+60/50/40 and verified monotone at low, mid and high player skill rather
+than at one assumed skill.
+
+| difficulty | seats | human win rate (mid skill) |
+|---|---|---|
+| easy | `[0.00, 0.00]` | 59.4% |
+| normal | `[0.20, 0.00]` | 51.7% |
+| hard | `[0.20, 0.50]` | 41.0% |
+
+Dice are unchanged and identical across difficulties. Difficulty has
+never moved the odds of a roll, only how the AI plays one.
+
+New `npm run sim:difficulty` is the harness. It fails the build if any
+tier stops being harder than the one below it, at any skill — the check
+the two-seat `npm run sim` structurally could not make.
+
+## Quitting a bad game is no longer free
+
+`recordGameOver` only fired when the engine reached `.over`, and
+nothing about a game survived a launch. Force-quitting a game you were
+losing left `winStreak` untouched, which is exactly what the best-streak
+boards measure; the weekly score board sums a player's best three
+games, so quitting the bad ones kept that pool clean too.
+
+New `AbandonGuard` persists a flag once a game has actually been played
+into — dealing one and backing out still costs nothing. A game found
+still armed at launch is filed as a loss before anything reads the
+stats. Walking out through Home or New Game is charged the same way, at
+the moment it happens.
+
+An abandoned game counts as a game played and breaks the streak. It
+does not touch best score, the best-runs archive, or the weekly pool.
+
+Win rates on the dashboard will fall for everybody at the 1.3 boundary.
+The denominator grew and the numerator did not; that is the fix working.
+
+## A bust gave itself away before the dice landed
+
+Four pieces of state were already frozen during the post-bust fake roll.
+The player's own vault was not — so the shell a bust costs vanished off
+their stack a full second before the banner said why. Frozen alongside
+the rest.
+
+Same window, second leak: a bust that emptied the beach presented the
+tally screen immediately, because the cover was gated on `bustFlash`,
+which is not raised until after the roll finishes. Now gated on the
+roll as well.
+
+## Ranks on the home screen
+
+Two bugs, one symptom.
+
+The splash asked for ranks from its `.task`, which on a cold launch runs
+while Game Center is still deciding who the player is. `loadStandings`
+returned nothing on its auth guard and nothing ever asked again, so a
+signed-in player saw no rank until they backgrounded the app and came
+back. Ranks now also refresh when auth lands — the same hook the
+achievement backfill already used.
+
+And the splash only ever showed *weekly* ranks. Weekly boards are
+deliberately never backfilled, so a player with years of history and no
+game yet this week had nothing to show. All-time ranks now stand in
+until a weekly one exists; the held-number-one crown is not printed
+twice when they do.
+
+## Achievements recovered from stored runs
+
+The one-time catch-up granted the seven achievements derivable from
+lifetime totals. `bestRuns` also keeps each run's difficulty, score and
+result, so `hard.win` and `squeaker` are recoverable too, and now are.
+
+Guarded by its own key rather than a cleared old one — reusing
+`didBackfill` would have meant the two new achievements never reached a
+single existing player, which is the entire group the backfill is for.
+Score submissions are not repeated.
+
+The remaining five (`clean.win`, `last.shell`, `steal.3`, `bust.3`,
+`bookends`) turn on per-game facts that were never written down. They
+stay locked rather than guessed at.
+
+## Share card can be saved
+
+`ShareLink` carried the App Store URL in `message:`, making the payload
+image-plus-text — and Photos only offers "Save Image" when every item is
+an image. The card also vended only raw PNG `Data`, which reaches the
+sheet as a file rather than a picture.
+
+Dropped the message, added an image representation alongside the data
+one. The card keeps its own "Shell Yes" and "Free on the App Store!"
+art, so discovery is now a name to search rather than a link to tap.
+Putting the URL back in `message:` silently removes Save Image again.
+
+---
+
 # 0.7 — Audio, tally polish, settings split — 2026-06-10
 
 Scope: iOS app (`ios/ShellYes/ShellYes/*.swift`). New sound effects,
