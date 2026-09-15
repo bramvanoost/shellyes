@@ -42,6 +42,17 @@ final class WhatsNew {
         Note(
             version: "1.3",
             title: "new this wave",
+            // These five are what build 7 shipped with, and this array
+            // is kept matching the binary rather than tidied after the
+            // fact — a card the player has already been shown is not
+            // something the repo gets to disagree with.
+            //
+            // The App Store notes for 1.3 deliberately run one line
+            // shorter: they do not mention saving the card to Photos.
+            // The fix for that is real but was never verified on a
+            // device (the simulator's Photos behaves differently), and
+            // a store listing is a promise in a way an in-app card is
+            // not. Verify it, then let the two agree again.
             lines: [
                 "Easy is properly easy now. It wasn't. Sorry.",
                 "Your rank turns up on the homescreen again",
