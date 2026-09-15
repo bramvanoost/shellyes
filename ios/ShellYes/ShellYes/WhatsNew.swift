@@ -73,6 +73,7 @@ final class WhatsNew {
                 "Saving your crown to your camera roll should actually work now. Cool.",
                 "Automation! Other players can play without you. In settings.",
                 "Big Kahuna also looks Kahunish in Dark Mode.",
+                "Six new badges for the weekly boards. Go get 'em.",
             ]
         ),
     ]
