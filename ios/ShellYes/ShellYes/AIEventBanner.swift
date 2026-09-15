@@ -2,6 +2,13 @@ import SwiftUI
 
 struct AIEventBanner: View {
     let event: GameStore.AIEvent
+
+    /// How much of the auto-continue wait is left, 1 down to 0, or nil
+    /// when the banner waits for a tap and nothing is counting. The
+    /// view only draws it — the countdown itself is run by the game
+    /// screen, the same place the bust flash runs its own.
+    var countdown: Double? = nil
+
     let onDismiss: () -> Void
 
     var body: some View {
@@ -49,12 +56,29 @@ struct AIEventBanner: View {
                         .padding(.top, 4)
                 }
 
-                Text("tap to continue")
-                    .font(.avenir(11, weight: .demiBold, italic: true))
-                    .tracking(2)
-                    .textCase(.lowercase)
-                    .foregroundStyle(tapHintColor)
-                    .padding(.top, 6)
+                VStack(spacing: 7) {
+                    // The tide pulling back, same as the bust flash —
+                    // a countdown that reads as the beach rather than
+                    // as a progress bar.
+                    if let countdown {
+                        WaveLine(wavelength: 10, amplitude: 2)
+                            .stroke(tapHintColor.opacity(0.9), lineWidth: 1.4)
+                            .frame(width: 140, height: 8)
+                            .mask(
+                                Rectangle()
+                                    .frame(width: 140 * countdown, height: 8)
+                            )
+                    }
+
+                    // A tap still skips the wait, so the hint stands
+                    // either way.
+                    Text("tap to continue")
+                        .font(.avenir(11, weight: .demiBold, italic: true))
+                        .tracking(2)
+                        .textCase(.lowercase)
+                        .foregroundStyle(tapHintColor)
+                }
+                .padding(.top, 6)
             }
             .padding(.vertical, 28)
             .padding(.horizontal, 24)

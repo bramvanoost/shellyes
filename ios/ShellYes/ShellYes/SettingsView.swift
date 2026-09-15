@@ -69,6 +69,12 @@ struct SettingsView: View {
                                     set: { settings.quietAITurns = $0; trackChange("quiet_ai", $0) }
                                 ))
                             }
+                            SettingsRow(title: "Auto-continue") {
+                                StampToggle(isOn: Binding(
+                                    get: { settings.autoContinue },
+                                    set: { settings.autoContinue = $0; trackChange("auto_continue", $0) }
+                                ))
+                            }
                             Button {
                                 showRestartConfirm = true
                             } label: {

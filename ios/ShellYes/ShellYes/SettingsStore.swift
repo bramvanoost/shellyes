@@ -43,6 +43,7 @@ final class SettingsStore {
     private static let soundModeKey = "ching.soundMode"
     private static let gameSpeedKey = "ching.gameSpeed"
     private static let quietAITurnsKey = "ching.quietAITurns"
+    private static let autoContinueKey = "ching.autoContinue"
     /// Tracks whether the user has been opted-in to a default yet. New
     /// installs land on quietAITurns = true (Tine-shaped audience).
     /// Existing players upgrading keep quietAITurns = false so the
@@ -87,6 +88,17 @@ final class SettingsStore {
         }
     }
 
+    /// Lets an AI seat's outcome banner dismiss itself, so a round of
+    /// bot turns plays out without the player tapping through it. Off
+    /// by default: tapping is how the game has always read, and a
+    /// banner that leaves on its own is a thing to opt into rather
+    /// than to discover mid-game.
+    var autoContinue: Bool {
+        didSet {
+            UserDefaults.standard.set(autoContinue, forKey: Self.autoContinueKey)
+        }
+    }
+
     init() {
         let rawDiff = UserDefaults.standard.string(forKey: Self.difficultyKey) ?? ""
         // Fresh installs open on Easy so a first game can't feel
@@ -120,6 +132,10 @@ final class SettingsStore {
             defaults.set(true, forKey: Self.quietAITurnsSeenKey)
         }
         self.quietAITurns = defaults.bool(forKey: Self.quietAITurnsKey)
+
+        // No fresh-install split here, unlike quiet turns: off for
+        // everybody until they ask for it.
+        self.autoContinue = defaults.bool(forKey: Self.autoContinueKey)
 
         AudioPolicy.shared.applySoundMode(soundMode)
     }

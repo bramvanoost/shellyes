@@ -61,6 +61,21 @@ final class GameStore {
         case took(actor: String, shell: Int, isFinal: Bool)
         case stole(actor: String, victim: String, shell: Int, isFinal: Bool)
         case bust(actor: String, burned: Int?)
+
+        /// Whether auto-continue is allowed to dismiss this banner on
+        /// its own. AI seats only: the player's own claim is a thing
+        /// they did and they get to look at it for as long as they
+        /// like. Nor the shell that ends the game — the tally waits
+        /// behind that banner, and being dropped into it without a tap
+        /// reads as the game having moved on without you.
+        var autoContinues: Bool {
+            switch self {
+            case .took(let actor, _, let isFinal), .stole(let actor, _, _, let isFinal):
+                return actor.lowercased() != "you" && !isFinal
+            case .bust(let actor, _):
+                return actor.lowercased() != "you"
+            }
+        }
     }
 
     private(set) var state: State

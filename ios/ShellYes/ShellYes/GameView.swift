@@ -60,6 +60,52 @@ struct GameView: View {
     /// piece of state that reads as a punishment.
     @SwiftUI.State private var bustFrozenPlayers: [Player]? = nil
     private let bustHoldSeconds: Double = 8.0
+
+    /// How much of an auto-continue wait is left, 1 down to 0. Drives
+    /// the wave on the AI banner the same way `bustProgress` drives
+    /// the one on the bust flash.
+    @SwiftUI.State private var aiEventProgress: Double = 1
+
+    /// Bumped every time a banner appears or is tapped away, so the
+    /// timer belonging to a banner the player already dismissed can't
+    /// come back and dismiss the next one.
+    @SwiftUI.State private var aiEventGeneration = 0
+
+    /// How long an AI seat's outcome stays up before it leaves on its
+    /// own: 2.2s at the fast pace, stretched by the Pace setting a
+    /// player who chose Slow already asked for. Long enough to read a
+    /// name and a shell number, short enough that two bot seats in a
+    /// row don't feel like a cutscene.
+    private var autoContinueSeconds: Double { 2.2 * settings.gameSpeed.factor }
+
+    /// Whether this banner leaves on its own. The setting decides
+    /// whether the feature is on at all; which events qualify is the
+    /// event's own business, so it can be tested without a screen.
+    private func autoContinues(_ event: GameStore.AIEvent) -> Bool {
+        settings.autoContinue && event.autoContinues
+    }
+
+    /// Runs one banner's countdown: reset the wave to full, drain it,
+    /// and dismiss when it runs out. Mirrors `triggerBustFlash` —
+    /// including the separate tick for the reset, so the start value
+    /// isn't swept into the long animation.
+    private func startAutoContinue(for event: GameStore.AIEvent) {
+        aiEventGeneration += 1
+        let generation = aiEventGeneration
+        let seconds = autoContinueSeconds
+        aiEventProgress = 1
+        DispatchQueue.main.async {
+            guard generation == aiEventGeneration else { return }
+            withAnimation(.linear(duration: seconds)) {
+                aiEventProgress = 0
+            }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard generation == aiEventGeneration, store.aiEvent == event else { return }
+            store.dismissAIEvent()
+        }
+    }
     /// How long the fake post-bust roll stays on screen before the
     /// flash takes over. Matches the dice animation duration roughly.
     private let rollBustVisualDelayNs: UInt64 = 1_000_000_000
@@ -384,6 +430,7 @@ struct GameView: View {
             "difficulty": settings.difficulty.rawValue,
             "pace": settings.gameSpeed.rawValue,
             "quiet_ai": settings.quietAITurns,
+            "auto_continue": settings.autoContinue,
             "games_played": stats.gamesPlayed,
         ])
     }
@@ -472,6 +519,9 @@ struct GameView: View {
         case .tally:
             try? await Task.sleep(nanoseconds: 500_000_000)
             store.debugForceGameOver()
+        case .aiBanner:
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            store.presentTurnEvent(.took(actor: "Sandy", shell: 28, isFinal: false))
         }
     }
     #endif
@@ -828,6 +878,7 @@ struct GameView: View {
                     "difficulty": settings.difficulty.rawValue,
                     "pace": settings.gameSpeed.rawValue,
                     "quiet_ai": settings.quietAITurns,
+                    "auto_continue": settings.autoContinue,
                 ]
                 Telemetry.shared.track("game_ended", props: endProps)
                 Telemetry.shared.track(humanWon ? "game_won" : "game_lost", props: endProps)
@@ -942,11 +993,24 @@ struct GameView: View {
         }
         .overlay {
             if let event = store.aiEvent {
-                AIEventBanner(event: event) {
+                AIEventBanner(
+                    event: event,
+                    countdown: autoContinues(event) ? aiEventProgress : nil
+                ) {
                     store.dismissAIEvent()
                 }
                 .animation(.easeOut(duration: 0.2), value: store.aiEvent)
             }
+        }
+        .onChange(of: store.aiEvent) { _, event in
+            guard let event, autoContinues(event) else {
+                // Cancels whatever was counting: either the banner was
+                // tapped away, or the one that replaced it is a banner
+                // the player has to answer themselves.
+                aiEventGeneration += 1
+                return
+            }
+            startAutoContinue(for: event)
         }
         // Tally screen waits until the last-shell banner is dismissed.
         // Without this gate, the fullScreenCover races the AIEventBanner

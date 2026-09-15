@@ -23,6 +23,10 @@ enum ScreenshotMode {
         case steal
         /// Jump straight to the end-of-game counting ceremony.
         case tally
+        /// Put a bot's outcome banner on screen, which a real game
+        /// only reaches by playing a turn out. The one way to look at
+        /// the auto-continue countdown without playing.
+        case aiBanner
     }
 
     /// A leaderboard standing to draw on the splash. The simulator
