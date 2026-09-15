@@ -86,6 +86,12 @@ final class WhatsNew {
         Self.notes.first { $0.version == currentVersion }
     }
 
+    /// This version's note regardless of whether it has been shown,
+    /// for the Settings row that asks for it on purpose. Nil on a
+    /// release with nothing to say, which is how the row knows to stay
+    /// off the screen.
+    var currentNote: Note? { noteForCurrentVersion }
+
     /// The note to show on this launch, or nil. Call it once, from the
     /// splash's task — it writes as well as reads, because the answer
     /// and the bookkeeping are the same decision and splitting them
@@ -127,6 +133,6 @@ final class WhatsNew {
     /// This version's note, whatever the bookkeeping says. The ladybug
     /// menu shows the card there and then rather than leaving somebody
     /// to quit and relaunch to see what they just reset.
-    func debugNote() -> Note? { noteForCurrentVersion }
+    func debugNote() -> Note? { currentNote }
     #endif
 }

@@ -20,6 +20,10 @@ struct SettingsView: View {
     @SwiftUI.State private var showExplainer = false
     @SwiftUI.State private var showRestartConfirm = false
     @SwiftUI.State private var placeholderOff = false
+
+    /// The news card, shown over the whole screen when the player asks
+    /// for it from the row below, or nil when it isn't up.
+    @SwiftUI.State private var whatsNewNote: WhatsNew.Note?
     @SwiftUI.State private var gameCenter = GameCenterEntry()
 
     var body: some View {
@@ -188,6 +192,25 @@ struct SettingsView: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            // Only on a release that has something to
+                            // say. A version with no note would open a
+                            // card with nothing on it, and an empty
+                            // row is worse than no row.
+                            if let note = WhatsNew.shared.currentNote {
+                                Button {
+                                    trackAction("whats_new")
+                                    withAnimation(.easeOut(duration: 0.25)) {
+                                        whatsNewNote = note
+                                    }
+                                } label: {
+                                    SettingsRow(title: "New this version") {
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(Color.coral)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
                             SettingsRow(title: "Tip jar", disabled: true) {
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 13, weight: .semibold))
@@ -220,6 +243,17 @@ struct SettingsView: View {
                         .padding(.bottom, 30)
                 }
                 .padding(.horizontal, 18)
+            }
+
+            // Over the scroll view rather than in a sheet: this is the
+            // same card the splash shows, and it dismisses the same
+            // way — a tap anywhere.
+            if let note = whatsNewNote {
+                WhatsNewCard(note: note, reducedMotion: settings.reducedMotion) {
+                    withAnimation(.easeOut(duration: 0.25)) { whatsNewNote = nil }
+                }
+                .transition(.opacity)
+                .zIndex(2)
             }
         }
         .navigationTitle("")
