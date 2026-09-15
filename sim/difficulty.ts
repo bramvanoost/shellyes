@@ -13,6 +13,8 @@
 //   1. Win rate strictly decreases from easy to hard.
 //   2. It does so at EVERY player skill, not just the one it was tuned
 //      at. A ladder that inverts for weak players is the bug again.
+//   3. Easy clears an absolute floor at middling skill. Monotone alone
+//      is satisfied by three tiers nobody would call easy.
 //
 // The human seat is played by the same AI at a fixed discipline, which
 // is a stand-in for player skill, not a claim about it. The absolute
@@ -41,15 +43,21 @@ const SKILLS = [0.35, 0.5, 0.65];
 /// Mirrors `Difficulty.seatDiscipline` in GameStore.swift. Keep the two
 /// in step — this file is what the comment there tells you to re-run.
 const LADDER: Record<string, [number, number]> = {
-  easy: [0.0, 0.0],
+  easy: [-0.2, -0.2],
   normal: [0.2, 0.0],
   hard: [0.2, 0.5],
 };
 
-/// Bram's targets, roughly. Easy is capped by what the discipline knob
-/// can actually reach (~59%), which he accepted rather than growing the
-/// AI a second knob.
-const TARGETS: Record<string, number> = { easy: 58.6, normal: 50, hard: 40 };
+/// Bram's targets, roughly. Easy at 0.00, the floor of the knob's
+/// documented 0..1 range, only reached 58.6% and played as a coin
+/// flip, so it now runs negative. See `Difficulty.seatDiscipline` in
+/// GameStore.swift for why that is meaningful and where it saturates.
+const TARGETS: Record<string, number> = { easy: 65.2, normal: 50, hard: 40 };
+
+/// Easy has to clear this at middling skill, not merely beat Normal.
+/// A ladder can be perfectly monotone and still open on a tier nobody
+/// would call easy, which is what 1.3 shipped.
+const EASY_FLOOR = 60;
 
 function humanWinRate(skill: number, seats: [number, number]): number {
   const discipline = [skill, seats[0], seats[1]];
@@ -85,6 +93,15 @@ for (const skill of SKILLS) {
         `${rate.toFixed(1)}%  (target ${TARGETS[name]}, ${drift >= 0 ? '+' : ''}${drift.toFixed(1)})`,
     );
   }
+  // Rule 3: Easy has to be easy in absolute terms, at middling skill.
+  if (skill === 0.5 && rates[0] <= EASY_FLOOR) {
+    console.error(
+      `  FAIL: easy is ${rates[0].toFixed(1)}% at middling skill, ` +
+        `which is not above the ${EASY_FLOOR}% floor`,
+    );
+    failed = true;
+  }
+
   // Rule 1 and 2: strictly decreasing, here and at every other skill.
   for (let i = 1; i < rates.length; i++) {
     if (rates[i] >= rates[i - 1]) {

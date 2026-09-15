@@ -1,6 +1,13 @@
 // CHING AI. Depends only on engine. Single discipline knob.
 // 0 = greedy: holds out for top-tier tiles, tolerates near-coin-flip busts.
 // 1 = cautious: banks any tile, bails at the first whiff of bust risk.
+//
+// The knob is signed, and nothing here clamps it. Below 0 the bust
+// ceiling keeps rising until it passes 1.0 at about -0.417, past which
+// the AI never stops for risk at all; the tier term saturates at once.
+// The app's Easy tier uses that headroom. See `Difficulty.seatDiscipline`
+// in GameStore.swift, and keep any change in step with AI.swift.
+//
 // No I/O. No Math.random/Date.
 
 import {

@@ -23,16 +23,34 @@ enum Difficulty: String, Codable, CaseIterable {
     /// *stronger* of the two. Measured over 20,000 games: Easy won
     /// 38.2% of the time against Normal's 39.7%. Easy was harder.
     ///
-    /// These pairs are tuned against Bram's targets — roughly 60 / 50 /
-    /// 40 percent human win rate — and verified monotone at low, mid
-    /// and high player skill rather than at one assumed skill. 40,000
-    /// games per cell, mid-skill column: 59.3 / 51.5 / 41.1.
+    /// These pairs are tuned against Bram's targets: Easy above 60,
+    /// then roughly 50 / 40 percent human win rate. Verified
+    /// monotone at low, mid and high player skill rather than at one
+    /// assumed skill. 20,000 games per cell, mid-skill column:
+    /// 65.2 / 51.7 / 41.0.
+    ///
+    /// Easy is negative on purpose. The knob is documented 0...1, but
+    /// neither engine clamps it, and below zero it keeps meaning
+    /// something: `bustCeiling = 0.75 - discipline * 0.6` climbs past
+    /// 0.75 until it passes 1.0 at about -0.417, where the AI will
+    /// never stop for risk again. The tier term saturates immediately
+    /// (`min(ceiling, ...)` caps it), so the bust ceiling is the only
+    /// thing moving down here. At 0.00, both seats already at the
+    /// floor of the documented range, Easy only reached 58.6%, which
+    /// played as a coin flip rather than as Easy.
+    ///
+    /// The lever is stepped, not smooth: `bustProb` is
+    /// `(pickedFaces / 6) ^ diceInHand`, a discrete set, so the
+    /// ceiling only bites when it crosses one of those values. Below
+    /// zero there are three distinct settings, 0.00 / -0.20 / -0.417,
+    /// and -0.20 is worth almost all of what -0.417 buys. Nudging
+    /// to -0.25 does nothing at all.
     ///
     /// Re-tune with `sim/difficulty.ts`, not by nudging a number and
     /// hoping. A pair that reads as "weaker" often is not.
     var seatDiscipline: [Double] {
         switch self {
-        case .easy:   return [0.00, 0.00]
+        case .easy:   return [-0.20, -0.20]
         case .normal: return [0.20, 0.00]
         case .hard:   return [0.20, 0.50]
         }

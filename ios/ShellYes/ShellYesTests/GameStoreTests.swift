@@ -99,7 +99,7 @@ final class GameStoreTests: XCTestCase {
     }
 
     func test_difficulty_seatDisciplineTable() {
-        XCTAssertEqual(Difficulty.easy.seatDiscipline, [0.00, 0.00])
+        XCTAssertEqual(Difficulty.easy.seatDiscipline, [-0.20, -0.20])
         XCTAssertEqual(Difficulty.normal.seatDiscipline, [0.20, 0.00])
         XCTAssertEqual(Difficulty.hard.seatDiscipline, [0.20, 0.50])
         XCTAssertEqual(Difficulty.allCases, [.easy, .normal, .hard])

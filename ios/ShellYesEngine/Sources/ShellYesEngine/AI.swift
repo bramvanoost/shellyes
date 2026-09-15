@@ -1,6 +1,10 @@
 import Foundation
 
 public struct Difficulty: Sendable, Equatable {
+    /// 0 = greedy, 1 = cautious. Signed, and deliberately unclamped:
+    /// below 0 the bust ceiling keeps rising until it passes 1.0 at
+    /// about -0.417, past which the AI never stops for risk. The app's
+    /// Easy tier lives there. Mirrors `Difficulty` in src/ai.ts.
     public var discipline: Double
     public init(discipline: Double) {
         self.discipline = discipline

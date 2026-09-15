@@ -46,6 +46,11 @@ The line above holds head to head. At the app's three-seat table it does not: ho
 
 Two consequences. Ambition is quantised — `round(4 - discipline * 3.5)` gives three bands (≤0.357, ≤0.786, above), so small nudges often change nothing at all. And "lower discipline" cannot be assumed to mean "weaker opponent". Tune `Difficulty.seatDiscipline` with `npm run sim:difficulty` and read the number; do not reason about it.
 
+### `discipline` is signed, and Easy lives below zero
+Documented 0..1, clamped by neither engine. Below 0 only `bustCeiling = 0.75 - discipline * 0.6` keeps moving, rising until it passes 1.0 at about -0.417, where the AI stops bailing on risk entirely; the ambition term saturates at once because `min(ceiling, ...)` caps it. Both seats at 0.00 — the floor of the documented range — gave Easy only 58.6%, which played as a coin flip, so 1.4 moved Easy to -0.20 for 65.2%. Bust probability is `(pickedFaces / 6) ^ diceInHand`, a discrete set, so the lever is stepped: 0.00, -0.20 and -0.417 are the only distinct settings below zero, and anything in between changes nothing. `sim/difficulty.ts` now enforces an absolute floor for Easy as well as monotonicity — a ladder can be perfectly monotone and still open on a tier nobody would call easy.
+
+`pickFace` ignores discipline entirely, so every tier picks dice identically and the whole ladder rides on stop/roll. That is the strongest untapped lever if Easy ever needs to go further: making Easy take the least valuable face measures at ~90% and is far too weak, but it shows the range.
+
 ### Bust burns the highest center tile (Heckmeck flip)
 "Return your top tile" alone caused 153/200 sim games to stalemate, tiles cycling in and out of the center forever. The burn rule is what makes the supply monotonically deplete. Do not remove it unless you add another depletion mechanism, and update CLAUDE.md if you do.
 
