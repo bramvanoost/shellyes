@@ -2,7 +2,7 @@ import SwiftUI
 import ImageIO
 import UniformTypeIdentifiers
 
-/// The fourteen achievement badges, drawn from the app's own palette
+/// The twenty achievement badges, drawn from the app's own palette
 /// and the brand shell rather than a separate art file. Same trick as
 /// `IconExporter`: the artwork IS SwiftUI, and a DEBUG-only export
 /// turns it into the 512x512 PNGs App Store Connect wants.
@@ -11,9 +11,9 @@ import UniformTypeIdentifiers
 /// surfaces, so every badge is designed circle-first and the square is
 /// just the canvas it sits on.
 ///
-/// Three dials separate the fourteen, because one was not enough: the
-/// first pass varied only the ring colour and the grid read as the same
-/// coin printed fourteen times. Now the ring names the family, the disc
+/// Three dials separate them, because one was not enough: the first
+/// pass varied only the ring colour and the grid read as the same coin
+/// printed fourteen times. Now the ring names the family, the disc
 /// ground shifts per badge, and the mark — not the shell — is the hero.
 
 /// The three families. The ring colour is the coarsest of the three
@@ -22,6 +22,7 @@ enum BadgeFamily {
     case skill      // how you played
     case milestone  // time served
     case silly      // on-brand nonsense
+    case week       // what you did with the seven days
 
     var accent: Color {
         switch self {
@@ -30,6 +31,11 @@ enum BadgeFamily {
         // into it and the family stopped reading.
         case .milestone: return Color(red: 214/255, green: 200/255, blue: 236/255)
         case .silly: return .coralLight
+        // Sea green, the one direction the other three do not already
+        // occupy. The weekly family is about the water going out and
+        // coming back, and it has to be told apart from gold at the
+        // size Game Center draws a grid.
+        case .week: return Color(red: 138/255, green: 218/255, blue: 205/255)
         }
     }
 }
@@ -60,6 +66,13 @@ enum BadgeMark {
     /// Shell 21 and shell 36: two shells hugging opposite rims.
     case bookends
     case waves(Int)
+    /// A held rank. The same crown the splash, the board and the stats
+    /// pane already use, so a badge for leading a board is recognisably
+    /// the thing the player has been looking at all along.
+    case crowns(Int)
+    /// The all-time crown, flanked by the palms the splash calls
+    /// laurels. Reserved for Big Kahuna, in both places.
+    case crownedLaurels
 }
 
 struct AchievementBadge: View {
@@ -177,6 +190,28 @@ struct AchievementBadge: View {
                 Spacer(minLength: 0)
                 ShellMedallion(size: size * 0.16)
             }
+
+        case .crowns(let n):
+            HStack(spacing: size * 0.03) {
+                ForEach(0..<n, id: \.self) { _ in
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: size * (n == 1 ? 0.2 : 0.1), weight: .medium))
+                        .foregroundStyle(Color.paper)
+                }
+            }
+
+        case .crownedLaurels:
+            // Semibold, like the splash: a stroked frond has to hold
+            // its own beside a filled crown or it reads as smudge.
+            HStack(spacing: size * 0.02) {
+                Image(systemName: "laurel.leading")
+                    .font(.system(size: size * 0.17, weight: .semibold))
+                Image(systemName: "crown.fill")
+                    .font(.system(size: size * 0.18, weight: .medium))
+                Image(systemName: "laurel.trailing")
+                    .font(.system(size: size * 0.17, weight: .semibold))
+            }
+            .foregroundStyle(Color.paper)
 
         case .waves(let n):
             VStack(spacing: size * 0.03) {
@@ -299,12 +334,30 @@ extension Achievement {
             return AchievementBadge(family: .silly, mark: .adriftShell, groundStep: 0.1)
         case .bookends:
             return AchievementBadge(family: .silly, mark: .bookends, groundStep: 0.85)
+
+        // The week. Its three local badges speak in pearls and water
+        // like the skill family, because they are about what you did;
+        // its three rank badges speak in crowns, because they are about
+        // where you stand and the crown already means that everywhere
+        // else in the app.
+        case .weekSweep:
+            return AchievementBadge(family: .week, mark: .pearls(5), groundStep: 0.3)
+        case .weekBestOfThree:
+            return AchievementBadge(family: .week, mark: .pearls(3), groundStep: 0.05)
+        case .weekBetter:
+            return AchievementBadge(family: .week, mark: .waves(2), groundStep: 0.5)
+        case .topBanana:
+            return AchievementBadge(family: .week, mark: .crowns(1), groundStep: 0.65)
+        case .wholeBeach:
+            return AchievementBadge(family: .week, mark: .crowns(5), groundStep: 0.85)
+        case .bigKahuna:
+            return AchievementBadge(family: .week, mark: .crownedLaurels, groundStep: 1.0)
         }
     }
 }
 
 #if DEBUG
-/// Writes all fourteen badges to the app's Documents directory as
+/// Writes all twenty badges to the app's Documents directory as
 /// 512x512 PNGs, named by achievement short key so the file matches the
 /// row in App Store Connect. DEBUG only — this is a design tool, not a
 /// shipped feature. Triggered from the debug menu.

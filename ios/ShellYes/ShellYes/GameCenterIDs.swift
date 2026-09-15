@@ -100,7 +100,10 @@ enum Leaderboard: String, CaseIterable {
     }
 }
 
-/// The fourteen achievements, in the order they appear in Game Center.
+/// The twenty achievements, in the order they appear in Game Center.
+///
+/// Fourteen shipped in 1.2. The six weekly ones were added in 1.4 and
+/// turn on the recurring boards rather than on a finished game.
 enum Achievement: String, CaseIterable {
     // Skill — how you played.
     case firstWin   = "com.fastronaut.game.shellyes.first.win"
@@ -122,6 +125,20 @@ enum Achievement: String, CaseIterable {
     case squeaker   = "com.fastronaut.game.shellyes.squeaker"
     case bookends   = "com.fastronaut.game.shellyes.bookends"
 
+    // The week — what you did with the seven days.
+    //
+    // These turn on the weekly boards rather than on one finished
+    // game, so nothing in `unlocked(after:lifetime:)` can reach them.
+    // They are checked where their facts live: the first three off
+    // `WeeklyBests` when a game is filed, the last three off
+    // `StandingsStore` when ranks come back.
+    case weekSweep       = "com.fastronaut.game.shellyes.week.sweep"
+    case weekBestOfThree = "com.fastronaut.game.shellyes.week.bestofthree"
+    case weekBetter      = "com.fastronaut.game.shellyes.week.better"
+    case topBanana       = "com.fastronaut.game.shellyes.rank.topbanana"
+    case wholeBeach      = "com.fastronaut.game.shellyes.rank.wholebeach"
+    case bigKahuna       = "com.fastronaut.game.shellyes.rank.bigkahuna"
+
     /// Short key used for the exported badge filename, so the PNG a
     /// designer sees matches the row in App Store Connect.
     var shortKey: String {
@@ -139,7 +156,9 @@ enum Achievement: String, CaseIterable {
              .played100, .won10, .won50:
             return true
         case .cleanWin, .hardWin, .lastShell, .steal3,
-             .bust3, .squeaker, .bookends:
+             .bust3, .squeaker, .bookends,
+             .weekSweep, .weekBestOfThree, .weekBetter,
+             .topBanana, .wholeBeach, .bigKahuna:
             return false
         }
     }

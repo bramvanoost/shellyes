@@ -199,6 +199,16 @@ final class StandingsStore {
     /// them.
     var topBoards: [BoardStanding] { standings.filter(\.isTop) }
 
+    /// The rank facts a badge turns on. Free: `refresh()` already
+    /// loaded every one of these, so the three rank achievements cost
+    /// no GameKit call of their own.
+    var rankProgress: RankProgress {
+        RankProgress(
+            weeklyTops: weekly.filter(\.isTop).count,
+            holdsAllTimeTop: allTime.contains(where: \.isTop)
+        )
+    }
+
     /// Pulls fresh ranks. Silent on failure: a rank is a nicety, and a
     /// player with no signal should see the last one we knew rather
     /// than an error.
@@ -228,6 +238,10 @@ final class StandingsStore {
         if let data = try? JSONEncoder().encode(fresh) {
             defaults.set(data, forKey: Key.cached)
         }
+        // Held ranks are achievements too, and this is the only moment
+        // the app learns about them. Re-reporting an earned one is a
+        // no-op to GameKit, so this needs no bookkeeping of its own.
+        GameCenter.shared.report(AchievementRules.unlocked(ranks: rankProgress), source: "rank")
         track()
     }
 

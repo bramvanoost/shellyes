@@ -464,6 +464,20 @@ final class GameCenter {
         submit(weekly.biggestKeep, to: WeeklyLeaderboard.biggestKeep)
 
         report(AchievementRules.unlocked(after: summary, lifetime: lifetime))
+
+        // The week's own three. Checked here rather than with the
+        // ranks because these turn on numbers this app just wrote, and
+        // a finished game is the only thing that moves them.
+        report(
+            AchievementRules.unlocked(
+                weekly: WeeklyProgress(
+                    boardsPosted: weekly.boardsPosted,
+                    filledBestOfThree: weekly.hasFilledBestOfThree,
+                    beatLastWeek: weekly.beatsPreviousWeek
+                )
+            ),
+            source: "week"
+        )
     }
 
     /// One-time catch-up for players who already have a history when
