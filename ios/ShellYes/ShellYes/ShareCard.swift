@@ -427,6 +427,18 @@ struct ShareCardImage: Transferable {
     let filename: String
 
     static var transferRepresentation: some TransferRepresentation {
+        // The image proxy goes FIRST, and that ordering is the whole
+        // point. A `TransferRepresentation` builder is a preference
+        // list, not a set: the share sheet takes the first one it can
+        // use and describes the item by it. With the PNG data first
+        // the card arrived as a *file*, so Photos never offered itself
+        // and the only destinations were Files and whatever else eats
+        // documents. 1.3 added this proxy but left it second, which
+        // changed nothing on a device.
+        ProxyRepresentation { Image(uiImage: $0.image) }
+
+        // Still vended, second: anything that would rather have a
+        // named PNG than an image object gets one.
         DataRepresentation(exportedContentType: .png) { card in
             guard let data = card.image.pngData() else {
                 throw ShareCardError.renderFailed
@@ -434,13 +446,6 @@ struct ShareCardImage: Transferable {
             return data
         }
         .suggestedFileName { $0.filename }
-
-        // Raw `Data` alone reaches the share sheet as a *file*, so the
-        // only place it can be saved to is Files. Photos wants an image
-        // object. Vending one as well is what puts "Save Image" in the
-        // sheet, and costs nothing: the data representation is still
-        // first, so anything that prefers a named PNG still gets one.
-        ProxyRepresentation { Image(uiImage: $0.image) }
     }
 }
 
