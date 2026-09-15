@@ -192,10 +192,16 @@ struct AchievementBadge: View {
             }
 
         case .crowns(let n):
-            HStack(spacing: size * 0.03) {
+            // A crown glyph is wider than its point size, so five of
+            // them at the size three would take run past the mark frame
+            // and into the ring — and Game Center crops to a circle, so
+            // the outer two lose their heads. Sized down as the row
+            // grows, not by a constant.
+            let crownSize = size * (n == 1 ? 0.2 : n <= 3 ? 0.1 : 0.068)
+            HStack(spacing: size * (n > 3 ? 0.018 : 0.03)) {
                 ForEach(0..<n, id: \.self) { _ in
                     Image(systemName: "crown.fill")
-                        .font(.system(size: size * (n == 1 ? 0.2 : 0.1), weight: .medium))
+                        .font(.system(size: crownSize, weight: .medium))
                         .foregroundStyle(Color.paper)
                 }
             }
