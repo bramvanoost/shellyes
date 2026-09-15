@@ -69,10 +69,10 @@ final class WhatsNew {
             version: "1.4",
             title: "new this wave",
             lines: [
-                "Easy is easy. Properly, this time. We measured it.",
-                "Saving your crown to Photos actually works now",
-                "The other players can take their turns without you",
-                "Big Kahuna marks show up in dark mode",
+                "Tweaked difficulty balance even more!",
+                "Saving your crown to your camera roll should actually work now. Cool.",
+                "Automation! Other players can play without you. In settings.",
+                "Big Kahuna also looks Kahunish in Dark Mode.",
             ]
         ),
     ]
