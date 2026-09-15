@@ -476,8 +476,10 @@ private struct StandingLine: View {
     /// Gold at full strength, not the pale coin cream. `coinGoldLight`
     /// is a highlight colour meant to sit on top of something darker;
     /// alone on the sand it all but disappeared, which is what made
-    /// both marks hard to see.
-    private var markColor: Color { Color.gold }
+    /// both marks hard to see. `goldMark` is that gold in light mode
+    /// and the highlight in dark, where the pill it sits on is dark
+    /// enough to swallow a hairline palm frond.
+    private var markColor: Color { Color.goldMark }
 
     /// The capsule behind a crowned title, and nothing at all behind a
     /// plain rank. It wraps the title alone now rather than the title
@@ -562,7 +564,11 @@ private struct StandingLine: View {
     /// all time.
     private func mark(_ name: String) -> some View {
         Image(systemName: name)
-            .font(.system(size: isKahuna ? 17 : 15, weight: .medium))
+            // The palms are drawn in strokes and the crown as a solid
+            // shape, so the same weight does not buy them the same
+            // presence. Semibold is what makes a frond hold its own
+            // beside a filled crown.
+            .font(.system(size: isKahuna ? 17 : 15, weight: isKahuna ? .semibold : .medium))
             .foregroundStyle(markColor)
             .shadow(
                 color: Color.coinGoldLight.opacity(crownGlow),

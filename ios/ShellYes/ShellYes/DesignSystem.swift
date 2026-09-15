@@ -56,6 +56,17 @@ extension Color {
     /// Gold pip — coin value markers on safes.
     static let gold = Color(red: 201/255, green: 140/255, blue: 74/255)
 
+    /// Gold for hairline marks — the crown and the palms on a crowned
+    /// standing. `gold` is a mid-bronze that solid shapes carry fine,
+    /// but the laurels are thin strokes sitting on a pale gold pill,
+    /// and in dark mode the pill goes muddy tan and swallows them. So
+    /// dark mode draws those marks in the highlight gold instead.
+    static let goldMark = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 250/255, green: 219/255, blue: 150/255, alpha: 1)
+            : UIColor(red: 201/255, green: 140/255, blue: 74/255, alpha: 1)
+    })
+
     // MARK: - Pearl (golden, pearlescent — not metallic)
 
     /// Center cream highlight inside the pearl. Bright, diffuse — never a hot spot.
