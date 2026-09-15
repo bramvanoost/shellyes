@@ -165,25 +165,19 @@ final class StandingsStore {
     /// mostly unwinnable once a ceilinged board fills up.
     var allTime: [BoardStanding] { standings.filter { !$0.isWeekly } }
 
-    /// What the splash should actually show: this week's ranks, or the
-    /// all-time ones when the player has no weekly rank yet.
+    /// What the splash shows: this week's ranks, and nothing when
+    /// there are none.
     ///
-    /// The weekly boards are deliberately never backfilled — a best run
-    /// from March is not something that happened this week, and posting
-    /// it into the current occurrence hands out a rank nobody earned.
-    /// The cost of that correctness is that a signed-in player with
-    /// years of history sees an empty splash until they finish a game
-    /// this week, which reads as the rank feature being broken rather
-    /// than as the boards being honest.
+    /// All-time ranks briefly stood in for an empty week, so a player
+    /// with years of history would see something. They made the splash
+    /// busy — five seniority lines above New Game — to say less than
+    /// the blank space does. An empty stack is honest: the weekly
+    /// boards are never backfilled, so until a game lands this week
+    /// there is no rank this week.
     ///
-    /// So the all-time ranks stand in until there is a weekly one. They
-    /// are a seniority queue and a worse thing to lead with, but they
-    /// are the player's own record and they are better than nothing.
-    /// The moment a game lands, the weekly ranks take the slot back.
-    var splashRanks: [BoardStanding] {
-        let week = weekly
-        return week.isEmpty ? allTime : week
-    }
+    /// A held all-time number one still gets its own line below, via
+    /// `splashCrown`. That is the one standing worth the row.
+    var splashRanks: [BoardStanding] { weekly }
 
     /// The one all-time standing worth promoting anyway. A held number
     /// one is the best thing about the account and would otherwise
@@ -193,13 +187,10 @@ final class StandingsStore {
         allTime.filter(\.isTop).min { $0.total > $1.total }
     }
 
-    /// The crown, unless the stack above it is already showing all-time
-    /// ranks — in which case the crown's own line is up there and
-    /// promoting it again would print the same standing twice.
-    var splashCrown: BoardStanding? {
-        guard let crown = allTimeCrown else { return nil }
-        return splashRanks.contains(crown) ? nil : crown
-    }
+    /// The all-time crown, promoted under this week's ranks. The
+    /// stack above is weekly-only, so it can never print the same
+    /// standing twice.
+    var splashCrown: BoardStanding? { allTimeCrown }
 
     /// True when the player is number one somewhere.
     var isTopBanana: Bool { best?.isTop == true }

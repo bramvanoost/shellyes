@@ -4,10 +4,10 @@ import XCTest
 /// What the splash is allowed to show, and when.
 ///
 /// The weekly boards are never backfilled on purpose — a best run from
-/// March did not happen this week. The cost of that correctness was a
-/// signed-in player with years of history staring at a splash with no
-/// rank on it, which reads as the feature being broken. `splashRanks`
-/// is the fallback that fixes it without touching what gets submitted.
+/// March did not happen this week. So a player with years of history
+/// and no game this week has no weekly rank, and the splash shows an
+/// empty stack rather than standing all-time seniority lines in its
+/// place. The one all-time line that survives is a held number one.
 @MainActor
 final class StandingsTests: XCTestCase {
 
@@ -62,15 +62,14 @@ final class StandingsTests: XCTestCase {
         XCTAssertEqual(s.splashRanks.map(\.boardID), [WeeklyLeaderboard.scoreEasy.rawValue])
     }
 
-    /// The case the fix exists for: a backfilled history, no game
-    /// played yet this week.
-    func test_splashRanks_fallsBackToAllTimeWhenNoWeeklyRankYet() {
+    /// All-time ranks never stand in for an empty week: five seniority
+    /// lines above New Game say less than the blank space does.
+    func test_splashRanks_staysEmptyWithOnlyAllTimeRanks() {
         let s = store(with: [
             allTime(.scoreEasy, rank: 12),
             allTime(.bestStreak, rank: 30),
         ])
-        XCTAssertEqual(s.splashRanks.count, 2)
-        XCTAssertTrue(s.splashRanks.allSatisfy { !$0.isWeekly })
+        XCTAssertTrue(s.splashRanks.isEmpty)
     }
 
     func test_splashRanks_isEmptyForAPlayerWhoHasNeverPlaced() {
@@ -90,16 +89,15 @@ final class StandingsTests: XCTestCase {
         XCTAssertEqual(s.splashCrown?.boardID, Leaderboard.scoreHard.rawValue)
     }
 
-    /// But not when the stack above is already showing all-time ranks:
-    /// the crown's own line is up there, and promoting it again would
-    /// print the same standing twice.
-    func test_splashCrown_isNilWhenTheFallbackAlreadyShowsIt() {
+    /// And it is the only line left when there is no weekly rank: the
+    /// stack above is empty, the crown still earns its row.
+    func test_splashCrown_survivesAnEmptyWeek() {
         let s = store(with: [
             allTime(.scoreHard, rank: 1),
             allTime(.bestStreak, rank: 30),
         ])
-        XCTAssertEqual(s.splashRanks.count, 2)
-        XCTAssertNil(s.splashCrown)
+        XCTAssertTrue(s.splashRanks.isEmpty)
+        XCTAssertEqual(s.splashCrown?.boardID, Leaderboard.scoreHard.rawValue)
     }
 
     func test_splashCrown_isNilWithoutANumberOne() {
