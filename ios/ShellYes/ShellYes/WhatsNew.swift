@@ -47,18 +47,32 @@ final class WhatsNew {
             // fact — a card the player has already been shown is not
             // something the repo gets to disagree with.
             //
-            // The App Store notes for 1.3 deliberately run one line
-            // shorter: they do not mention saving the card to Photos.
-            // The fix for that is real but was never verified on a
-            // device (the simulator's Photos behaves differently), and
+            // The App Store notes for 1.3 deliberately ran one line
+            // shorter: they did not mention saving the card to Photos,
+            // because that fix had never been verified on a device and
             // a store listing is a promise in a way an in-app card is
-            // not. Verify it, then let the two agree again.
+            // not. That caution was right. Tested on a device during
+            // 1.4 and it did not work: the sheet offered Files and
+            // Dropbox and no Photos at all. Two of these five lines,
+            // this one and the Easy one, were untrue in build 7. 1.4
+            // is where they both come true, which is why its card says
+            // so plainly rather than quietly repeating them.
             lines: [
                 "Easy is properly easy now. It wasn't. Sorry.",
                 "Your rank turns up on the homescreen again",
                 "Old games now count towards achievements",
                 "Walking out of a game counts as a loss",
                 "Save your crown card straight to Photos",
+            ]
+        ),
+        Note(
+            version: "1.4",
+            title: "new this wave",
+            lines: [
+                "Easy is easy. Properly, this time. We measured it.",
+                "Saving your crown to Photos actually works now",
+                "The other players can take their turns without you",
+                "Big Kahuna marks show up in dark mode",
             ]
         ),
     ]
