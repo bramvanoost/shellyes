@@ -75,6 +75,22 @@ final class WhatsNew {
                 "Big Kahuna also looks Kahunish in Dark Mode.",
             ]
         ),
+        Note(
+            version: "1.5",
+            title: "new this wave",
+            // 1.2's card already promised weekly boards and they have
+            // never once worked: they were configured in App Store
+            // Connect but never released, so Apple accepted every
+            // score and dropped it. The first line owns that rather
+            // than quietly repeating the claim, the same way 1.4's
+            // card owned the Photos fix.
+            lines: [
+                "Weekly leaderboards. For real this time! I hope. Shakes fist at Apple.",
+                "Every Monday, the beach is cleared!",
+                "Your week is your best three games",
+                "Cleaned up the homescreen",
+            ]
+        ),
     ]
 
     private enum Key {
