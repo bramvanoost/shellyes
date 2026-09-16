@@ -187,6 +187,7 @@ struct SplashView: View {
                             } label: {
                                 StandingLine(
                                     standing: standing,
+                                    crowned: standing.id == standings.weeklyCrown?.id,
                                     reducedMotion: settings.reducedMotion
                                 )
                             }
@@ -200,6 +201,7 @@ struct SplashView: View {
                             } label: {
                                 StandingLine(
                                     standing: crown,
+                                    crowned: true,
                                     reducedMotion: settings.reducedMotion
                                 )
                             }
@@ -454,8 +456,19 @@ private struct OutlineLabel: View {
 /// all-time one means nobody who has ever played has done better. The
 /// palms carry that by being wider and taller than the crown rather
 /// than by being a grander version of it.
+///
+/// Only one weekly line is dressed this way, however many are held —
+/// see `StandingsStore.weeklyCrown`. The rest read as plain ranks,
+/// which is why the badge is a `crowned` flag handed in rather than
+/// `standing.isTop` read off the standing.
 private struct StandingLine: View {
     let standing: BoardStanding
+    /// Whether this line wears the badge. Leading a board and being
+    /// dressed as the leader are now two questions: `StandingsStore`
+    /// hands the pill to one weekly standing out of however many are
+    /// held, so the rest of them fall back to a plain rank. See
+    /// `StandingsStore.weeklyCrown`.
+    let crowned: Bool
     let reducedMotion: Bool
 
     /// Drives the Top Banana breath. One flag, flipped once, animated
@@ -471,7 +484,7 @@ private struct StandingLine: View {
     /// crown by definition, and dressed accordingly. The rule lives on
     /// the standing, so the share card crowns exactly what this line
     /// crowns.
-    private var isKahuna: Bool { standing.isKahuna }
+    private var isKahuna: Bool { crowned && standing.isKahuna }
 
     /// Gold at full strength, not the pale coin cream. `coinGoldLight`
     /// is a highlight colour meant to sit on top of something darker;
@@ -486,7 +499,7 @@ private struct StandingLine: View {
     /// plus its board phrase, which is what makes it read as a badge.
     @ViewBuilder
     private var pill: some View {
-        if standing.isTop {
+        if crowned {
             Capsule()
                 .fill(Color.coinGoldLight.opacity(
                     isKahuna ? (glowing ? 0.44 : 0.28) : (glowing ? 0.30 : 0.18)
@@ -516,7 +529,7 @@ private struct StandingLine: View {
     /// standing is just its rank.
     @ViewBuilder
     private var titleRow: some View {
-        if standing.isTop {
+        if crowned {
             HStack(spacing: isKahuna ? 4 : 7) {
                 mark(isKahuna ? "laurel.leading" : "crown.fill")
 
@@ -554,10 +567,10 @@ private struct StandingLine: View {
     /// little darker there than it would be out on the sand — it has
     /// gold behind it rather than open background.
     private var contextText: some View {
-        Text(standing.isTop ? standing.crownContextLine : standing.contextLine)
+        Text(crowned ? standing.crownContextLine : standing.contextLine)
             .font(.avenir(13, weight: .medium, italic: true))
             .tracking(1)
-            .foregroundStyle(Color.ink.opacity(standing.isTop ? 0.62 : 0.45))
+            .foregroundStyle(Color.ink.opacity(crowned ? 0.62 : 0.45))
     }
 
     /// One mark, sized to its tier. The crown for a week, a palm for
@@ -588,7 +601,7 @@ private struct StandingLine: View {
         // a claim about — rather than a title with a caption loose
         // underneath it.
         Group {
-            if standing.isTop {
+            if crowned {
                 VStack(spacing: 1) {
                     titleRow
                         // One height for both crowned tiers, so the two
@@ -619,20 +632,20 @@ private struct StandingLine: View {
         // the swell is small enough to notice only once the eye has
         // settled on it. Held still entirely when the player has asked
         // for less motion — the gold alone still marks rank one.
-        .scaleEffect(standing.isTop && glowing ? 1.035 : 1.0)
+        .scaleEffect(crowned && glowing ? 1.035 : 1.0)
         .animation(
-            reducedMotion || !standing.isTop
+            reducedMotion || !crowned
                 ? nil
                 : .easeInOut(duration: 3.5).repeatForever(autoreverses: true),
             value: glowing
         )
         .onAppear {
-            guard standing.isTop, !reducedMotion else { return }
+            guard crowned, !reducedMotion else { return }
             glowing = true
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            standing.isTop
+            crowned
                 ? "\(standing.crownTitle ?? ""), \(standing.summary), \(standing.boardPhrase)"
                 : "\(standing.summary) \(standing.boardPhrase)"
         )

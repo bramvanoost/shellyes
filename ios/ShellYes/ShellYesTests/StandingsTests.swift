@@ -72,6 +72,43 @@ final class StandingsTests: XCTestCase {
         XCTAssertNil(st.splashCrown)
     }
 
+    // MARK: - One weekly crown
+
+    func test_weeklyCrown_picksTheBusiestBoardLed() {
+        // Five weekly boards and a small field means leading three of
+        // them at once is ordinary. One badge, on the board with the
+        // most people on it.
+        let st = store(with: [
+            weekly(.scoreEasy, rank: 1, total: 40),
+            weekly(.scoreNormal, rank: 1, total: 900),
+            weekly(.bestStreak, rank: 1, total: 120),
+            weekly(.biggestKeep, rank: 6, total: 300),
+        ])
+
+        XCTAssertEqual(st.weeklyCrown?.boardID, WeeklyLeaderboard.scoreNormal.rawValue)
+    }
+
+    func test_weeklyCrown_withNoWeeklyLead_isNil() {
+        // An all-time number one does not lend its badge to the weekly
+        // stack; it gets its own line via `splashCrown`.
+        let st = store(with: [
+            weekly(.scoreEasy, rank: 3),
+            allTime(.scoreEasy, rank: 1),
+        ])
+
+        XCTAssertNil(st.weeklyCrown)
+        XCTAssertNotNil(st.splashCrown)
+    }
+
+    func test_weeklyCrown_ignoresAnUnrankedBoard() {
+        let st = store(with: [
+            weekly(.scoreEasy, rank: 0, total: 900),
+            weekly(.bestStreak, rank: 1, total: 120),
+        ])
+
+        XCTAssertEqual(st.weeklyCrown?.boardID, WeeklyLeaderboard.bestStreak.rawValue)
+    }
+
     // MARK: - Ties at the top
 
     func test_crownContextLine_carriesTheRankAndTheField() {

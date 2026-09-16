@@ -210,6 +210,21 @@ final class StandingsStore {
     /// `splashCrown`. That is the one standing worth the row.
     var splashRanks: [BoardStanding] { weekly }
 
+    /// The one weekly lead that wears the badge.
+    ///
+    /// A crown printed on every board it is true of stops being a
+    /// crown. There are five weekly boards and a small field, so
+    /// leading three of them at once is ordinary rather than rare, and
+    /// three breathing gold pills above New Game say less than one
+    /// does. The busiest board wins it, on the same reasoning as
+    /// `best`: 1st of 900 is a bigger claim than 1st of 12.
+    ///
+    /// The other leads are not hidden. They print their plain "1st of
+    /// 88", which is the same fact without a second badge.
+    var weeklyCrown: BoardStanding? {
+        weekly.filter(\.isTop).min { $0.total > $1.total }
+    }
+
     /// The one all-time standing worth promoting anyway. A held number
     /// one is the best thing about the account and would otherwise
     /// never be seen; anything below it is the seniority queue the
