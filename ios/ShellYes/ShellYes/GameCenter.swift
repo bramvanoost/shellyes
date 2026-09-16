@@ -279,7 +279,12 @@ final class GameCenter {
                     timeScope: .allTime,
                     range: NSRange(location: 1, length: 1)
                 )
-                guard let localEntry else { continue }
+                // Rank 0 is Game Center's answer for a board the
+                // player has no score on. It is not a place, and a
+                // weekly board hands one back all week until a game
+                // lands, so it is dropped here rather than cached and
+                // filtered on the way out.
+                guard let localEntry, localEntry.rank >= 1 else { continue }
                 found.append(
                     BoardStanding(
                         boardID: board.baseLeaderboardID,

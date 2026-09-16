@@ -56,6 +56,10 @@ struct BoardStanding: Codable, Equatable, Identifiable {
 
     /// Holding the best score on the board, which a tie shares. See
     /// `topScore` for why rank one alone is not the question.
+    /// Holds a place at all. Game Center reports rank 0 for a board
+    /// the player has no score on, and a zeroth place is not a place.
+    var isRanked: Bool { rank >= 1 }
+
     var isTop: Bool {
         if rank == 1 { return true }
         guard let topScore else { return false }
@@ -111,6 +115,14 @@ struct BoardStanding: Codable, Equatable, Identifiable {
     var summary: String {
         "\(ordinal) of \(total)"
     }
+
+    /// The line under a crowned title: "1st of 340 · easy · all time".
+    ///
+    /// A crown says you lead. It does not say what you lead, and 1st of
+    /// 12 and 1st of 3,000 are not the same claim. A plain standing
+    /// already prints `summary` as its title row, so the figure is only
+    /// missing from the crowned ones, which is where this goes.
+    var crownContextLine: String { "\(summary) · \(contextLine)" }
 
     private static let ordinalFormatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -172,11 +184,17 @@ final class StandingsStore {
     }
 
     /// This week's ranks — the winnable ones, and what the splash shows.
-    var weekly: [BoardStanding] { standings.filter(\.isWeekly) }
+    ///
+    /// Unranked rows are dropped. Game Center answers for a board the
+    /// player has not scored on this week with rank 0, which the splash
+    /// printed as "0th of 88": a place nobody holds, on a board they
+    /// have not played. A weekly board only starts saying something
+    /// once a game lands in the week it measures.
+    var weekly: [BoardStanding] { standings.filter { $0.isWeekly && $0.isRanked } }
 
     /// All-time ranks, kept out of the splash stack because they are
     /// mostly unwinnable once a ceilinged board fills up.
-    var allTime: [BoardStanding] { standings.filter { !$0.isWeekly } }
+    var allTime: [BoardStanding] { standings.filter { !$0.isWeekly && $0.isRanked } }
 
     /// What the splash shows: this week's ranks, and nothing when
     /// there are none.

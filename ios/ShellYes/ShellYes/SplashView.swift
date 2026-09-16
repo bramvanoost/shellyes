@@ -554,7 +554,7 @@ private struct StandingLine: View {
     /// little darker there than it would be out on the sand — it has
     /// gold behind it rather than open background.
     private var contextText: some View {
-        Text(standing.contextLine)
+        Text(standing.isTop ? standing.crownContextLine : standing.contextLine)
             .font(.avenir(13, weight: .medium, italic: true))
             .tracking(1)
             .foregroundStyle(Color.ink.opacity(standing.isTop ? 0.62 : 0.45))
@@ -633,7 +633,7 @@ private struct StandingLine: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             standing.isTop
-                ? "\(standing.crownTitle ?? "") \(standing.boardPhrase)"
+                ? "\(standing.crownTitle ?? ""), \(standing.summary), \(standing.boardPhrase)"
                 : "\(standing.summary) \(standing.boardPhrase)"
         )
     }

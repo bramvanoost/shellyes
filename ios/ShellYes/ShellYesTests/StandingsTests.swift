@@ -51,7 +51,37 @@ final class StandingsTests: XCTestCase {
         return StandingsStore(defaults: defaults)
     }
 
+    // MARK: - Unranked boards
+
+    func test_splashRanks_dropsAZerothPlace() {
+        // Game Center answers rank 0 for a board with no score on it.
+        // The splash printed that as "0th of 88".
+        let st = store(with: [
+            weekly(.scoreEasy, rank: 0),
+            weekly(.bestStreak, rank: 7),
+            weekly(.biggestKeep, rank: 0),
+        ])
+
+        XCTAssertEqual(st.splashRanks.map(\.rank), [7])
+    }
+
+    func test_allTimeCrown_ignoresAZerothPlace() {
+        let st = store(with: [allTime(.scoreEasy, rank: 0)])
+
+        XCTAssertNil(st.allTimeCrown)
+        XCTAssertNil(st.splashCrown)
+    }
+
     // MARK: - Ties at the top
+
+    func test_crownContextLine_carriesTheRankAndTheField() {
+        let crowned = BoardStanding(
+            boardID: Leaderboard.scoreEasy.rawValue, period: .allTime,
+            rank: 1, total: 340, score: 34
+        )
+
+        XCTAssertEqual(crowned.crownContextLine, "1st of 340 · easy · all time")
+    }
 
     func test_isTop_withAScoreLevelWithTheLeader_countsAsTop() {
         // Game Center ranks a tie by who posted first, so a player
