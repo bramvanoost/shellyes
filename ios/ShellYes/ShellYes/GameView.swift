@@ -266,7 +266,6 @@ struct GameView: View {
         // bank/steal celebration is handled per-column (sparkles + steal pulse).
         // The turn has ended whenever the engine advanced `current` OR flipped
         // to `.over` (game-ending claim keeps current pinned to the human).
-        var didBank = false
         var didBust = false
         let humanTurnEnded = wasHumanTurn
             && (store.state.current != beforeCurrent || store.isOver)
@@ -318,7 +317,6 @@ struct GameView: View {
             } else {
                 // Vault grew — successful bank or steal.
                 GameSFX.shared.playBank()
-                didBank = true
                 // Present a turn-note banner for the human's claim. Detect
                 // steal by checking if another seat lost a tile this apply.
                 if let claimed = store.state.players[humanSeat].tiles.last {

@@ -65,7 +65,6 @@ struct Scoreboard: View {
     private func column(playerIndex i: Int) -> some View {
         let isActive = i == current
         let isStolen = stolenFrom == i
-        let pearlCount = scores[i]
         VStack(spacing: 8) {
             Text(players[i].id.capitalized)
                 .font(.avenir(14, weight: isActive ? .demiBold : .medium))
