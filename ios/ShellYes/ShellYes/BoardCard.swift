@@ -14,6 +14,27 @@ struct BoardRow: Identifiable, Equatable {
     var id: Int { rank }
 }
 
+extension BoardRow {
+    /// The ranks that wear the crown, which is everybody tied at the
+    /// top score rather than whoever holds rank one.
+    ///
+    /// Game Center breaks a tie by who posted first, so three players
+    /// on 14 come back as ranks 1, 2 and 3. Drawing the crown on rank
+    /// one alone told the other two they were behind, over a number
+    /// the player can plainly see is the same. The score is the thing
+    /// on screen, so it is the thing the crown follows.
+    ///
+    /// Falls back to rank one when no rank-one row is present, which
+    /// only happens if a board ever hands back a window that does not
+    /// start at the top.
+    static func crownedRanks(in rows: [BoardRow]) -> Set<Int> {
+        guard let topScore = rows.first(where: { $0.rank == 1 })?.score else {
+            return Set(rows.filter { $0.rank == 1 }.map(\.rank))
+        }
+        return Set(rows.filter { $0.score == topScore }.map(\.rank))
+    }
+}
+
 /// A board as the app reads it: the rows worth drawing, and how many
 /// players the board holds in total so a rank has a denominator.
 struct BoardPage: Equatable {
@@ -93,6 +114,10 @@ struct BoardCard: View {
     var isLoading: Bool = false
     var onOpenGameCenter: () -> Void = {}
 
+    /// Ranks drawn with a crown instead of a number. A tie at the top
+    /// crowns every player in it; see `BoardRow.crownedRanks`.
+    private var crowned: Set<Int> { BoardRow.crownedRanks(in: rows) }
+
     var body: some View {
         VStack(spacing: 0) {
             Text(title)
@@ -118,7 +143,7 @@ struct BoardCard: View {
             } else {
                 VStack(spacing: 3) {
                     ForEach(rows) { row in
-                        BoardCardRow(row: row)
+                        BoardCardRow(row: row, crowned: crowned.contains(row.rank))
                     }
                 }
                 .padding(.horizontal, 12)
@@ -167,12 +192,16 @@ struct BoardCard: View {
 /// eye lands on it before it reads any names.
 private struct BoardCardRow: View {
     let row: BoardRow
+    /// Tied at the top score. Decided by the card, not the row, because
+    /// it takes the whole board to know it.
+    let crowned: Bool
 
     var body: some View {
         HStack(spacing: 10) {
-            // Rank one gets the crown rather than a "1", which is the
-            // same mark the splash pill and the share card use.
-            if row.rank == 1 {
+            // A crowned rank gets the crown rather than its number,
+            // which is the same mark the splash pill and the share
+            // card use.
+            if crowned {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.gold)

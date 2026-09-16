@@ -270,7 +270,11 @@ final class GameCenter {
                 // Range is 1-based and must be non-empty, so ask for
                 // the single top entry. `loadEntries` returns the local
                 // player's own row separately, whatever their position.
-                let (localEntry, _, total) = try await board.loadEntries(
+                // The top entry used to be thrown away; it is kept now
+                // because its score is the only way to tell a tie at
+                // the top from a genuine second place — Game Center
+                // ranks a tie by who posted first.
+                let (localEntry, topEntries, total) = try await board.loadEntries(
                     for: .global,
                     timeScope: .allTime,
                     range: NSRange(location: 1, length: 1)
@@ -282,7 +286,8 @@ final class GameCenter {
                         period: period,
                         rank: localEntry.rank,
                         total: total,
-                        score: localEntry.score
+                        score: localEntry.score,
+                        topScore: topEntries.first?.score
                     )
                 )
             }

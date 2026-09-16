@@ -30,6 +30,13 @@ struct BoardStanding: Codable, Equatable, Identifiable {
     /// opposite pieces of news.
     let total: Int
     let score: Int
+    /// The board's leading score, when the read knew it. Game Center
+    /// breaks a tie by who posted first, so a player level with the
+    /// leader comes back as rank two and would otherwise be told they
+    /// are behind over a number they can see is the same. Optional
+    /// because a cache written before this existed decodes without it,
+    /// and an absent one simply falls back to rank alone.
+    var topScore: Int? = nil
 
     var id: String { boardID }
 
@@ -47,7 +54,13 @@ struct BoardStanding: Codable, Equatable, Identifiable {
         board?.standingPhrase ?? weeklyBoard?.standingPhrase ?? ""
     }
 
-    var isTop: Bool { rank == 1 }
+    /// Holding the best score on the board, which a tie shares. See
+    /// `topScore` for why rank one alone is not the question.
+    var isTop: Bool {
+        if rank == 1 { return true }
+        guard let topScore else { return false }
+        return score == topScore
+    }
 
     /// Rank one on a board that never resets. Rarer than the weekly
     /// crown by definition — nobody who has ever played has done

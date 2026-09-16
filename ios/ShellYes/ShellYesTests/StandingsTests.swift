@@ -51,6 +51,47 @@ final class StandingsTests: XCTestCase {
         return StandingsStore(defaults: defaults)
     }
 
+    // MARK: - Ties at the top
+
+    func test_isTop_withAScoreLevelWithTheLeader_countsAsTop() {
+        // Game Center ranks a tie by who posted first, so a player
+        // level with the leader arrives as rank two. The crown follows
+        // the score, which is the number on screen.
+        let tied = BoardStanding(
+            boardID: Leaderboard.scoreEasy.rawValue, period: .allTime,
+            rank: 2, total: 40, score: 14, topScore: 14
+        )
+
+        XCTAssertTrue(tied.isTop)
+        XCTAssertTrue(tied.isKahuna)
+        XCTAssertEqual(tied.crownTitle, "Big Kahuna")
+    }
+
+    func test_isTop_belowTheLeadingScore_isNotTop() {
+        let second = BoardStanding(
+            boardID: Leaderboard.scoreEasy.rawValue, period: .allTime,
+            rank: 2, total: 40, score: 13, topScore: 14
+        )
+
+        XCTAssertFalse(second.isTop)
+        XCTAssertNil(second.crownTitle)
+    }
+
+    func test_isTop_withoutATopScore_fallsBackToRank() {
+        // A standing cached before `topScore` existed decodes without
+        // one and keeps the old rank-one rule.
+        XCTAssertTrue(allTime(.scoreEasy, rank: 1).isTop)
+        XCTAssertFalse(allTime(.scoreEasy, rank: 2).isTop)
+    }
+
+    func test_cachedStanding_writtenBeforeTopScore_stillDecodes() throws {
+        let json = "[{\"boardID\":\"\(Leaderboard.scoreEasy.rawValue)\",\"period\":\"allTime\",\"rank\":1,\"total\":40,\"score\":14}]"
+        let decoded = try JSONDecoder().decode([BoardStanding].self, from: Data(json.utf8))
+
+        XCTAssertNil(decoded.first?.topScore)
+        XCTAssertEqual(decoded.first?.isTop, true)
+    }
+
     // MARK: - splashRanks
 
     func test_splashRanks_prefersThisWeek() {
