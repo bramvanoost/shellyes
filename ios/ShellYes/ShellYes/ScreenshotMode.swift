@@ -54,6 +54,9 @@ enum ScreenshotMode {
         case weekly
         /// The all-time one: palms, "Big Kahuna".
         case allTime
+        /// A plain rank: the one-page sheet, board only, no card under
+        /// it. Pair with `-standings mid`.
+        case ranked
     }
 
     /// Hands the board page stand-in rows. The simulator has no Game
@@ -61,6 +64,16 @@ enum ScreenshotMode {
     /// its empty state.
     static var seedsBoardRows: Bool {
         ProcessInfo.processInfo.arguments.contains("-boardCard")
+    }
+
+    /// How many stand-in rows to seed. Eight is what fits the box, so
+    /// the default board does not scroll; `-boardRows 20` is how a test
+    /// asks for one that does.
+    static var boardRowCount: Int {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-boardRows"), i + 1 < args.count,
+              let n = Int(args[i + 1]) else { return 8 }
+        return n
     }
 
     /// Opens the share sheet already scrolled past the board to the

@@ -1,7 +1,68 @@
 import SwiftUI
 
-/// The screen a tapped crown opens: two vertical pages, the board the
-/// crown came from and the card that celebrates it.
+/// Everything the board sheet needs to know, built from a standing the
+/// player already holds.
+///
+/// A rank is a rank: tapping any of them opens this, and the board it
+/// came from is on page one. What changes with the rank is whether
+/// there is a second page — `card` is set only for a held number one,
+/// because that is the only standing with a claim to make, and a
+/// twelfth place offered a "share your crown" button would be a joke at
+/// the player's expense.
+///
+/// Plain values, no GameKit and no views, so the whole thing is
+/// checkable in a test without a signed-in account.
+struct BoardSheetSubject: Equatable, Identifiable {
+    /// The leaderboard the rows come from. A raw id rather than the
+    /// enum, for the same reason `BoardStanding` stores one: a standing
+    /// cached by a later build must still carry its id through.
+    let boardID: String
+    /// The page's heading: "easy · this week".
+    let title: String
+    /// How many players the board holds, for the denominator.
+    let total: Int
+    /// The player's own place on it, for telemetry.
+    let rank: Int
+    /// Which window this board measures, for telemetry.
+    let period: StandingPeriod
+    /// The board's short name, for telemetry.
+    let boardKey: String
+    /// Set on weekly score boards, where the number needs explaining.
+    let footnote: String?
+    /// The share card, or nil below a held number one.
+    let card: ShareCardSubject?
+
+    var id: String { "\(boardID)|\(period.rawValue)|\(rank)" }
+
+    /// What the player is, in one word, for telemetry: the two crowns,
+    /// or a plain ranked player.
+    var tier: String {
+        guard let card else { return "ranked" }
+        return card.isKahuna ? "big_kahuna" : "top_banana"
+    }
+
+    static func from(
+        standing: BoardStanding,
+        name: String?,
+        now: Date = Date()
+    ) -> BoardSheetSubject {
+        BoardSheetSubject(
+            boardID: standing.boardID,
+            // The middot form, so the sheet's heading is the same
+            // string the splash badge carried: "easy · this week".
+            title: standing.contextLine,
+            total: standing.total,
+            rank: standing.rank,
+            period: standing.period,
+            boardKey: standing.shortKey,
+            footnote: standing.boardFootnote,
+            card: ShareCardSubject.from(standing: standing, name: name, now: now)
+        )
+    }
+}
+
+/// The screen a tapped standing opens: the board it came from, and —
+/// for a held number one — the card that celebrates it a swipe below.
 ///
 /// Why this sits between the splash and Apple's leaderboard screen at
 /// all: Apple's `GKGameCenterViewController` is built for modal
@@ -14,7 +75,9 @@ import SwiftUI
 ///
 /// The board is page one, because that is what a tap on a rank
 /// implies. The card is page two, with its top edge showing under the
-/// board so it needs no explaining. The plain Leaderboards button on
+/// board so it needs no explaining. Below rank one there is no page
+/// two and no peek — one page that ends where the board ends, rather
+/// than a pager with a missing half. The plain Leaderboards button on
 /// the splash still goes straight to Apple's screen, for anyone who
 /// only wants the real thing, and `open in Game Center` on the board
 /// page does the same.
@@ -23,16 +86,17 @@ import SwiftUI
 /// which means the card can reach Photos without the app ever asking
 /// for the photo library — one fewer permission prompt, and nothing
 /// for the filed App Privacy answers to change.
-struct ShareCardSheet: View {
-    let subject: ShareCardSubject
+struct BoardSheet: View {
+    let subject: BoardSheetSubject
     /// Called after this sheet closes, to open Apple's board.
     let onSeeBoard: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
-    /// Rendered once, on appear. A card is a few hundred kilobytes of
-    /// PNG and the render is not free; re-rendering it on every layout
-    /// pass would be paid for in a stutter as the sheet slides up.
+    /// Rendered once, on appear, and only when there is a card to
+    /// render. A card is a few hundred kilobytes of PNG and the render
+    /// is not free; re-rendering it on every layout pass would be paid
+    /// for in a stutter as the sheet slides up.
     @SwiftUI.State private var card: ShareCardImage?
 
     /// Which crowd the board page is reading: everybody, or the
@@ -74,10 +138,14 @@ struct ShareCardSheet: View {
     /// fits better. The two limits are the sheet's width and a little
     /// under two thirds of its height, which keeps the share button and
     /// the board link on screen on the smallest phone we support.
+    ///
+    /// Floored at zero. The first layout pass can propose a size of
+    /// nothing, and `(0 - 48) / 360` is a negative scale, which reaches
+    /// `.frame(width:)` as "Invalid frame dimension" in the console.
     private func previewScale(in size: CGSize) -> CGFloat {
         let byWidth = (size.width - 48) / ShareCardView.size.width
         let byHeight = (size.height * 0.62) / ShareCardView.size.height
-        return min(1, byWidth, byHeight)
+        return max(0, min(1, byWidth, byHeight))
     }
 
     /// Page identities for the scroll proxy. Plain constants rather
@@ -102,6 +170,30 @@ struct ShareCardSheet: View {
     /// different heights.
     private let peek: CGFloat = 148
 
+    /// How tall the board page is. A page with a card under it stops
+    /// short so the card's top edge shows; a page with nothing under it
+    /// is the whole sheet.
+    private func boardHeight(in size: CGSize) -> CGFloat {
+        // Floored for the same reason `previewScale` is: a first pass
+        // proposing nothing would otherwise ask for a page 148pt tall
+        // in the negative direction.
+        max(0, subject.card == nil ? size.height : size.height - peek)
+    }
+
+    /// How tall the rows may grow before the list starts scrolling.
+    ///
+    /// The card's own chrome — heading, denominator, footnote, the Game
+    /// Center link — plus the scope toggle and the way down to the card
+    /// come to about 300pt, and all of it is set in fixed sizes, so
+    /// subtracting a constant is honest here in a way it would not be
+    /// under Dynamic Type. The fraction is the floor that keeps the
+    /// smallest phone sane: on an SE the subtraction alone would leave
+    /// room for five names.
+    private func rowsMaxHeight(in size: CGSize) -> CGFloat {
+        let page = boardHeight(in: size)
+        return max(page * 0.38, page - 300)
+    }
+
     var body: some View {
         GeometryReader { geo in
         let scale = previewScale(in: geo.size)
@@ -113,54 +205,68 @@ struct ShareCardSheet: View {
             Color.paper.opacity(0.45)
                 .ignoresSafeArea()
 
-            // Two pages, vertical. The board is page one, because that
-            // is what a tap on a rank implies and it is the page with
-            // something to read; the card is a swipe below it, with its
-            // top edge showing so nobody has to guess it is there.
-            ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    VStack(spacing: 0) {
-                        boardPage(goToCard: {
-                            trackCardReached(via: "link")
-                            withAnimation(.easeInOut(duration: 0.35)) {
-                                proxy.scrollTo(Page.card, anchor: .top)
-                            }
-                        })
-                        .frame(height: geo.size.height - peek)
-                        .id(Page.board)
-
-                        cardPage(
-                            scale: scale,
-                            goToCard: {
-                                trackCardReached(via: "peek")
+            if let cardSubject = subject.card {
+                // Two pages, vertical. The board is page one, because
+                // that is what a tap on a rank implies and it is the
+                // page with something to read; the card is a swipe
+                // below it, with its top edge showing so nobody has to
+                // guess it is there.
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        VStack(spacing: 0) {
+                            boardPage(in: geo.size, goToCard: {
+                                trackCardReached(via: "link")
                                 withAnimation(.easeInOut(duration: 0.35)) {
                                     proxy.scrollTo(Page.card, anchor: .top)
                                 }
-                            },
-                            goToBoard: {
-                                withAnimation(.easeInOut(duration: 0.35)) {
-                                    proxy.scrollTo(Page.board, anchor: .top)
+                            })
+                            .frame(height: boardHeight(in: geo.size))
+                            .id(Page.board)
+
+                            cardPage(
+                                cardSubject,
+                                scale: scale,
+                                goToCard: {
+                                    trackCardReached(via: "peek")
+                                    withAnimation(.easeInOut(duration: 0.35)) {
+                                        proxy.scrollTo(Page.card, anchor: .top)
+                                    }
+                                },
+                                goToBoard: {
+                                    withAnimation(.easeInOut(duration: 0.35)) {
+                                        proxy.scrollTo(Page.board, anchor: .top)
+                                    }
                                 }
-                            }
-                        )
-                        .frame(height: geo.size.height)
-                        .id(Page.card)
+                            )
+                            .frame(height: geo.size.height)
+                            .id(Page.card)
+                        }
+                        .scrollTargetLayout()
                     }
-                    .scrollTargetLayout()
+                    // Without this the sheet can open at the bottom of
+                    // the content instead of the top, which put the
+                    // card on screen first and left the board behind an
+                    // upward swipe — the opposite of the intended
+                    // order.
+                    .defaultScrollAnchor(.top)
+                    .scrollTargetBehavior(.viewAligned)
+                    .scrollIndicators(.hidden)
+                    #if DEBUG
+                    .task {
+                        guard ScreenshotMode.startsOnShareCard else { return }
+                        proxy.scrollTo(Page.card, anchor: .top)
+                    }
+                    #endif
                 }
-                // Without this the sheet can open at the bottom of the
-                // content instead of the top, which put the card on
-                // screen first and left the board behind an upward
-                // swipe — the opposite of the intended order.
-                .defaultScrollAnchor(.top)
-                .scrollTargetBehavior(.viewAligned)
-                .scrollIndicators(.hidden)
-                #if DEBUG
-                .task {
-                    guard ScreenshotMode.startsOnShareCard else { return }
-                    proxy.scrollTo(Page.card, anchor: .top)
-                }
-                #endif
+            } else {
+                // Nothing to crown, so nothing below: one page, no
+                // pager, no peek. The rows inside it still scroll when
+                // there are more of them than fit — that list is the
+                // only scroll on the screen, which is the whole reason
+                // this branch is not a one-page scroll view with a
+                // second scroll view inside it.
+                boardPage(in: geo.size, goToCard: nil)
+                    .frame(height: geo.size.height)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -187,7 +293,8 @@ struct ShareCardSheet: View {
             .accessibilityLabel("Close")
         }
         .task {
-            card = ShareCardRenderer.render(subject)
+            guard let cardSubject = subject.card else { return }
+            card = ShareCardRenderer.render(cardSubject)
         }
         .task(id: scope) {
             await loadRows(for: scope)
@@ -198,17 +305,21 @@ struct ShareCardSheet: View {
     // ------------------------------------------- page one: the board
 
     @ViewBuilder
-    private func boardPage(goToCard: @escaping () -> Void) -> some View {
+    private func boardPage(
+        in size: CGSize,
+        goToCard: (() -> Void)?
+    ) -> some View {
         VStack(spacing: 16) {
             Spacer(minLength: 0)
 
             BoardCard(
-                title: subject.boardTitle,
+                title: subject.title,
                 rows: page?.rows ?? [],
                 total: total,
                 scope: scope,
-                footnote: subject.boardFootnote,
+                footnote: subject.footnote,
                 isLoading: page == nil,
+                rowsMaxHeight: rowsMaxHeight(in: size),
                 onOpenGameCenter: {
                     dismiss()
                     onSeeBoard()
@@ -222,18 +333,21 @@ struct ShareCardSheet: View {
             // A tap target for the same move the peek already
             // suggests. The card edge below is the affordance; this is
             // for the thumb that would rather press a word than drag.
-            Button(action: goToCard) {
-                VStack(spacing: 2) {
-                    Text("share your crown")
-                        .font(.avenir(13, weight: .medium, italic: true))
-                        .tracking(2)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+            // Absent below rank one, where there is no card to go to.
+            if let goToCard {
+                Button(action: goToCard) {
+                    VStack(spacing: 2) {
+                        Text("share your crown")
+                            .font(.avenir(13, weight: .medium, italic: true))
+                            .tracking(2)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.ink.opacity(0.55))
+                    .padding(.vertical, 4)
                 }
-                .foregroundStyle(Color.ink.opacity(0.55))
-                .padding(.vertical, 4)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 24)
         .padding(.top, 24)
@@ -286,6 +400,7 @@ struct ShareCardSheet: View {
 
     @ViewBuilder
     private func cardPage(
+        _ subject: ShareCardSubject,
         scale: CGFloat,
         goToCard: @escaping () -> Void,
         goToBoard: @escaping () -> Void
@@ -387,7 +502,7 @@ struct ShareCardSheet: View {
         didTrackCard = true
         Telemetry.shared.track("share_card_viewed", props: [
             "via": via,
-            "tier": subject.isKahuna ? "big_kahuna" : "top_banana",
+            "tier": subject.tier,
         ])
     }
 
@@ -395,16 +510,19 @@ struct ShareCardSheet: View {
     ///
     /// Fetched here rather than alongside the ranks on the splash: the
     /// splash needs one number per board and gets it from a range of
-    /// one, while this needs eight rows from a single board, and
-    /// asking for all of them up front would be five larger round
-    /// trips for a page most launches never open.
+    /// one, while this needs a whole board's rows, and asking for all
+    /// of them up front would be five larger round trips for a page
+    /// most launches never open.
     private func loadRows(for scope: BoardScope) async {
         // Already fetched this sheet: the toggle is a redraw, not a
         // second round trip.
         guard pages[scope] == nil else { return }
         #if DEBUG
         if ScreenshotMode.seedsBoardRows {
-            let rows = BoardCard.mockRows(me: GameCenter.shared.playerFirstName)
+            let rows = BoardCard.mockRows(
+                me: GameCenter.shared.playerFirstName,
+                count: ScreenshotMode.boardRowCount
+            )
             pages[scope] = BoardPage(
                 rows: scope == .friends ? Array(rows.prefix(4)) : rows,
                 total: scope == .friends ? 4 : subject.total

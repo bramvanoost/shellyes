@@ -112,11 +112,46 @@ struct BoardCard: View {
     /// empty `rows` so the card never tells somebody the board is
     /// empty while it is still being asked.
     var isLoading: Bool = false
+    /// How tall the rows may grow before they start scrolling. Nil
+    /// leaves them unbounded, which is what a card drawn outside a
+    /// fixed-height page wants.
+    ///
+    /// Only the rows scroll. The title, the denominator and the Game
+    /// Center link stay put, so the card keeps its shape and the only
+    /// thing that moves under the thumb is the one thing there is more
+    /// of than fits.
+    var rowsMaxHeight: CGFloat?
     var onOpenGameCenter: () -> Void = {}
 
     /// Ranks drawn with a crown instead of a number. A tie at the top
     /// crowns every player in it; see `BoardRow.crownedRanks`.
     private var crowned: Set<Int> { BoardRow.crownedRanks(in: rows) }
+
+    /// The rows' own height, once laid out. Measured rather than
+    /// inferred: whether the list needs to scroll cannot be left to
+    /// `ViewThatFits`, because this card sits inside the sheet's pager
+    /// and a view inside a scroll view is measured against an unbounded
+    /// proposal — under which a list of any length "fits" and the
+    /// scrolling branch is never chosen.
+    @SwiftUI.State private var measuredRowsHeight: CGFloat?
+
+    /// What to ask for before the measurement lands: 35pt a row plus
+    /// the 3pt gaps. Every font on a row is a fixed size, so this is
+    /// close, and it only has to survive one layout pass — it exists so
+    /// the card opens at roughly the right height instead of snapping.
+    private var rowsHeight: CGFloat {
+        if let measuredRowsHeight { return measuredRowsHeight }
+        let n = CGFloat(rows.count)
+        return n * 35 + max(0, n - 1) * 3
+    }
+
+    private var rowsStack: some View {
+        VStack(spacing: 3) {
+            ForEach(rows) { row in
+                BoardCardRow(row: row, crowned: crowned.contains(row.rank))
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -140,13 +175,28 @@ struct BoardCard: View {
                     .foregroundStyle(Color.ink.opacity(0.55))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
-            } else {
-                VStack(spacing: 3) {
-                    ForEach(rows) { row in
-                        BoardCardRow(row: row, crowned: crowned.contains(row.rank))
-                    }
+            } else if let rowsMaxHeight {
+                // Only the rows scroll, and only when there are more of
+                // them than fit. `.basedOnSize` is what keeps a short
+                // board out of the way: with nothing to scroll the list
+                // does not bounce and does not take the pan, so a swipe
+                // over eight names still pages the sheet the way it
+                // always did. A long one takes the swipe, which is what
+                // a list longer than its box is for.
+                ScrollView(.vertical) {
+                    rowsStack
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            measuredRowsHeight = height
+                        }
                 }
+                .frame(height: min(rowsHeight, rowsMaxHeight))
+                .scrollBounceBehavior(.basedOnSize)
                 .padding(.horizontal, 12)
+            } else {
+                rowsStack
+                    .padding(.horizontal, 12)
             }
 
             VStack(spacing: 6) {
@@ -255,17 +305,29 @@ extension BoardCard {
     /// The local player's row is named by whoever the run says they
     /// are, so a capture seeded with `-playerName` does not show one
     /// name in the greeting and another on the board.
-    static func mockRows(me: String?) -> [BoardRow] {
-        [
-        BoardRow(rank: 1, name: me ?? "You", score: 96, isMe: true),
-        BoardRow(rank: 2, name: "Marina", score: 94, isMe: false),
-        BoardRow(rank: 3, name: "Nalu", score: 91, isMe: false),
-        BoardRow(rank: 4, name: "Hazel", score: 88, isMe: false),
-        BoardRow(rank: 5, name: "Reef", score: 84, isMe: false),
-        BoardRow(rank: 6, name: "Tine", score: 79, isMe: false),
-        BoardRow(rank: 7, name: "Coral", score: 77, isMe: false),
-        BoardRow(rank: 8, name: "Dune", score: 72, isMe: false),
+    /// `count` is how many rows to hand back, so a capture run can ask
+    /// for a board that overflows its box and one that does not. It
+    /// stays at eight by default because the App Store captures and
+    /// `ShareSheetPagingTests` are both framed around that board: eight
+    /// rows fit, which means no inner scroll view and a swipe anywhere
+    /// still pages the sheet.
+    static func mockRows(me: String?, count: Int = 8) -> [BoardRow] {
+        let names = [
+            "Marina", "Nalu", "Hazel", "Reef", "Tine", "Coral", "Dune",
+            "Wren", "Pim", "Sol", "Mika", "Luz", "Bo", "Fern", "Otto",
+            "Suri", "Kit", "Vale", "Nim", "Roan",
         ]
+        return (1...max(1, count)).map { rank in
+            BoardRow(
+                rank: rank,
+                name: rank == 1 ? (me ?? "You") : names[(rank - 2) % names.count],
+                // A gap that never ties, so the crown stays on rank one
+                // and the tie rule is exercised only where a test asks
+                // for it.
+                score: 99 - rank * 2,
+                isMe: rank == 1
+            )
+        }
     }
 }
 #endif

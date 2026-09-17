@@ -52,28 +52,11 @@ struct ShareCardSubject: Equatable, Identifiable {
     /// "96 coins", "5 wins in a row". Nil for a board this build
     /// doesn't recognise, in which case the card simply omits the line.
     let scorePhrase: String?
-    /// How many players are on the board this card came from, so the
-    /// board page can put a denominator under the rows.
-    var total: Int = 0
-    /// "easy, this week" — the board this card came from, as the second
-    /// page's heading.
-    var boardTitle: String = ""
     /// What the board counts, so the card can name the record in
     /// words — "Top Score" rather than the board's own terse "easy".
     /// Nil for a board this build doesn't recognise, which is the one
     /// case where the card falls back to the old one-line form.
     var kind: BoardKind?
-    /// Set on weekly score boards only, where the number on the board
-    /// is a sum of three games and reads as a bug without a sentence
-    /// saying so. Apple's own sheet has no room to say it, which is
-    /// half the reason we draw the board ourselves.
-    var boardFootnote: String?
-    /// The leaderboard this card came from, so the sheet's board page
-    /// can go and fetch its rows. A raw id rather than the enum for
-    /// the same reason `BoardStanding` stores one: a card built from a
-    /// cached standing written by an older build must still carry the
-    /// id through, even if this build has no case for it.
-    var boardID: String = ""
 
     /// The record, named: "All Time Top Score", "This Week's Best
     /// Streak". Title case and up front, because the card is read by
@@ -128,6 +111,11 @@ struct ShareCardSubject: Equatable, Identifiable {
 
     /// The card for a standing, or nil when there is nothing to
     /// celebrate — anything below rank one has no claim to make.
+    ///
+    /// Only what the picture says. Everything about the *board* — its
+    /// id, its heading, how many players it holds — belongs to
+    /// `BoardSheetSubject`, which is built for every rank rather than
+    /// only the crowned ones.
     static func from(
         standing: BoardStanding,
         name: String?,
@@ -154,17 +142,7 @@ struct ShareCardSubject: Equatable, Identifiable {
             boardName: standing.boardName,
             windowLine: window,
             scorePhrase: standing.scorePhrase,
-            total: standing.total,
-            // The middot form, so the board page's heading is the same
-            // string the splash badge carried: "easy · this week",
-            // "easy · all time". A comma here and a middot there read
-            // as two different labels for one board.
-            boardTitle: standing.contextLine,
-            kind: standing.kind,
-            boardFootnote: standing.isWeekly && standing.weeklyBoard?.kind == .score
-                ? "your best three games this week, added up"
-                : nil,
-            boardID: standing.boardID
+            kind: standing.kind
         )
     }
 }

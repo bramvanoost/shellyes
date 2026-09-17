@@ -358,9 +358,19 @@ final class GameCenter {
     /// without one, and `board_scope_viewed` in the dashboard answers
     /// the question with real accounts. If it comes back empty for
     /// everybody, the grant is the next thing to try.
+    ///
+    /// `top` is how many rows to ask for. Fifty rather than the eight
+    /// the card first drew, because the card scrolls now and a board
+    /// that says "of 13 players" while showing eight of them is the
+    /// page answering a question with most of the answer missing.
+    /// GameKit caps a single `loadEntries` range at 100, so this is a
+    /// ceiling and not a page: a board deeper than fifty simply shows
+    /// its first fifty and the local player's own row, which is every
+    /// row anybody came here to read. Paging on scroll would be
+    /// machinery for boards this game does not have.
     func loadBoardRows(
         for boardID: String,
-        top: Int = 8,
+        top: Int = 50,
         scope: BoardScope = .everyone
     ) async -> BoardPage {
         guard isAuthenticated, !boardID.isEmpty else { return .empty }

@@ -82,6 +82,23 @@ struct BoardStanding: Codable, Equatable, Identifiable {
     /// know about.
     var kind: BoardKind? { board?.kind ?? weeklyBoard?.kind }
 
+    /// The board's short name for telemetry, which is the same string
+    /// whichever window the standing came from.
+    var shortKey: String {
+        board?.shortKey ?? weeklyBoard?.shortKey ?? "unknown"
+    }
+
+    /// The sentence a board needs under its rows, or nil for the boards
+    /// that need none.
+    ///
+    /// Only the weekly score boards do: the number on them is three
+    /// games added up, which nobody ever scored in one game and which
+    /// reads as a bug unless something says so.
+    var boardFootnote: String? {
+        guard isWeekly, weeklyBoard?.kind == .score else { return nil }
+        return "your best three games this week, added up"
+    }
+
     /// The score in words: "96 coins", "5 wins in a row", "8 coins in
     /// one keep". A bare number means nothing away from the board it
     /// came from, and the share card is the one place the number is

@@ -12,8 +12,8 @@ struct SplashView: View {
     @SwiftUI.State private var showExplainer: Bool = false
     @SwiftUI.State private var gameCenter = GameCenterEntry()
 
-    /// The card a tapped crown opens, or nil when no card is up.
-    @SwiftUI.State private var shareSubject: ShareCardSubject?
+    /// The board a tapped standing opens, or nil when no sheet is up.
+    @SwiftUI.State private var boardSubject: BoardSheetSubject?
 
     /// The news this update brings, once per version, or nil when
     /// there is none to tell.
@@ -74,30 +74,30 @@ struct SplashView: View {
         return (try? AttributedString(markdown: raw)) ?? AttributedString(raw)
     }
 
-    /// What tapping a standing does.
+    /// What tapping a standing does: opens the board it came from,
+    /// drawn in our own look, with the player's row in it.
     ///
-    /// A held number one opens its share card, because that is the one
-    /// rank worth showing anybody and the moment the player is proudest
-    /// is the moment to offer it. Everything else goes straight to the
-    /// board, which is the only useful thing to do with a twelfth
-    /// place. The Leaderboards button below is untouched either way, so
-    /// the direct route to Apple's screen always exists.
+    /// Every rank, not only a crowned one. A tap on "8th of 13" asks a
+    /// plain question — who are the other twelve — and until 1.7 it was
+    /// answered by dropping the player into Apple's leaderboard *list*,
+    /// which is not even the board they tapped. A held number one gets
+    /// the same board plus its share card a swipe below; see
+    /// `BoardSheetSubject`.
+    ///
+    /// The Leaderboards button below is untouched, so the direct route
+    /// to Apple's screen always exists.
     private func tap(_ standing: BoardStanding) {
-        guard let subject = ShareCardSubject.from(
+        let subject = BoardSheetSubject.from(
             standing: standing,
             name: GameCenter.shared.playerFirstName
-        ) else {
-            gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
-            return
-        }
-        Telemetry.shared.track("share_card_opened", props: [
-            "board": standing.board?.shortKey
-                ?? standing.weeklyBoard?.shortKey
-                ?? "unknown",
-            "period": standing.period.rawValue,
-            "tier": standing.isKahuna ? "big_kahuna" : "top_banana",
+        )
+        Telemetry.shared.track("board_sheet_opened", props: [
+            "board": subject.boardKey,
+            "period": subject.period.rawValue,
+            "rank": subject.rank,
+            "tier": subject.tier,
         ])
-        shareSubject = subject
+        boardSubject = subject
     }
 
     var body: some View {
@@ -362,8 +362,8 @@ struct SplashView: View {
         .sheet(isPresented: $showExplainer) {
             ExplainerView(from: "home", gamesPlayed: stats.gamesPlayed)
         }
-        .sheet(item: $shareSubject) { subject in
-            ShareCardSheet(subject: subject) {
+        .sheet(item: $boardSubject) { subject in
+            BoardSheet(subject: subject) {
                 gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
             }
         }
@@ -377,11 +377,14 @@ struct SplashView: View {
                 GameCenter.shared.debugSetPlayerName(seeded)
             }
             if let seed = ScreenshotMode.shareCardSeed {
-                let crowned = seed == .weekly
-                    ? standings.weekly.first(where: \.isTop)
-                    : standings.allTimeCrown
+                let crowned: BoardStanding?
+                switch seed {
+                case .weekly:  crowned = standings.weekly.first(where: \.isTop)
+                case .allTime: crowned = standings.allTimeCrown
+                case .ranked:  crowned = standings.weekly.first(where: { !$0.isTop })
+                }
                 if let crowned {
-                    shareSubject = ShareCardSubject.from(
+                    boardSubject = BoardSheetSubject.from(
                         standing: crowned,
                         name: GameCenter.shared.playerFirstName
                     )
