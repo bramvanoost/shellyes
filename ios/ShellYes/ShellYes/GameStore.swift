@@ -81,17 +81,24 @@ final class GameStore {
         case bust(actor: String, burned: Int?)
 
         /// Whether auto-continue is allowed to dismiss this banner on
-        /// its own. AI seats only: the player's own claim is a thing
-        /// they did and they get to look at it for as long as they
-        /// like. Nor the shell that ends the game — the tally waits
-        /// behind that banner, and being dropped into it without a tap
-        /// reads as the game having moved on without you.
+        /// its own. One carve-out: the shell that ends the game. The
+        /// tally waits behind that banner, and being dropped into it
+        /// without a tap reads as the game having moved on without you.
+        ///
+        /// Whose move it was used to matter too — your own claim, steal
+        /// or bust waited for a tap on the reasoning that a thing you
+        /// did is a thing you should get to look at. But a player with
+        /// auto-continue on had already asked not to tap, and being made
+        /// to tap for their own moment and not for anyone else's read as
+        /// the setting half working. The banner still draws its draining
+        /// wave and a tap still dismisses early, so the moment is
+        /// offered rather than withheld.
         var autoContinues: Bool {
             switch self {
-            case .took(let actor, _, let isFinal), .stole(let actor, _, _, let isFinal):
-                return actor.lowercased() != "you" && !isFinal
-            case .bust(let actor, _):
-                return actor.lowercased() != "you"
+            case .took(_, _, let isFinal), .stole(_, _, _, let isFinal):
+                return !isFinal
+            case .bust:
+                return true
             }
         }
     }
