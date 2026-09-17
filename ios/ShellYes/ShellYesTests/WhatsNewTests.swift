@@ -82,6 +82,38 @@ final class WhatsNewTests: XCTestCase {
                 note.lines.contains(where: \.isEmpty),
                 "\(note.version) has an empty line"
             )
+            if let intro = note.intro {
+                XCTAssertFalse(
+                    intro.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    "\(note.version) has an intro with nothing in it"
+                )
+            }
         }
+    }
+
+    /// The mistake this exists to stop happening again: 1.5 build 12 was
+    /// uploaded with the version bumped and no matching note, and a
+    /// version absent from `notes` shows no card at all. Nothing failed,
+    /// nothing warned, and the build had to be superseded.
+    ///
+    /// Reads the bundle rather than a literal, so bumping
+    /// `MARKETING_VERSION` and forgetting the words fails here instead
+    /// of in App Store Connect.
+    func test_theShippingVersionHasANote() {
+        let shipping = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+
+        // The test bundle carries its own version, so fall back to the
+        // app's when that is what turns up.
+        let version = shipping ?? ""
+        guard !version.isEmpty, version != "1.0" else {
+            return XCTFail("could not read a version to check")
+        }
+
+        XCTAssertTrue(
+            WhatsNew.notes.contains { $0.version == version },
+            "version \(version) is shipping with no What's New note — "
+                + "the card would not appear at all"
+        )
     }
 }

@@ -387,6 +387,9 @@ struct SplashView: View {
                     )
                 }
             }
+            if ScreenshotMode.forcesWhatsNew, whatsNewNote == nil {
+                whatsNewNote = WhatsNew.shared.debugNote()
+            }
             #endif
             // Once per version, and never over a capture run. The
             // check writes as well as reads, so a second appearance of

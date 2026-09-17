@@ -18,6 +18,12 @@ final class WhatsNew {
     struct Note: Equatable {
         let version: String
         let title: String
+        /// Optional lead-in, set above the shell-bulleted lines as plain
+        /// paragraphs. 1.6 is the first release whose news needed a
+        /// sentence of context before the list — "here is the thing that
+        /// has been wrong" does not read as a bullet, and a bullet
+        /// saying "Also:" is a heading wearing the wrong clothes.
+        var intro: String? = nil
         let lines: [String]
     }
 
@@ -89,6 +95,25 @@ final class WhatsNew {
                 "Every Monday, the beach is cleared!",
                 "Your week is your best three games",
                 "Cleaned up the homescreen",
+            ]
+        ),
+        Note(
+            version: "1.6",
+            title: "new this wave",
+            // The backfill fix is the headline even though it is the
+            // least visible thing in the release: it is the one that
+            // explains why somebody's history was missing from the
+            // boards. The "Also:" that separated it from the list in
+            // the draft is gone — the gap between the paragraph and the
+            // shells says the same thing without a word.
+            intro: """
+                Scores and leaderboards seem… challenging.
+                This wave tries to restore older scores + fixes some more thingses!
+                """,
+            lines: [
+                "Tally has a soft skip now, for the impatient. Like me.",
+                "Auto-continue now includes your own card, yay!",
+                "Fixed an interesting bug that conjured extra dice, leviosa!",
             ]
         ),
     ]

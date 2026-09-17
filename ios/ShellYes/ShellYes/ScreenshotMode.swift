@@ -70,6 +70,16 @@ enum ScreenshotMode {
         ProcessInfo.processInfo.arguments.contains("-sharePage")
     }
 
+    /// Forces the What's New card for the running version.
+    ///
+    /// The card is normally once-per-version and writes as it reads, so
+    /// capturing it otherwise means faking an upgrade in UserDefaults —
+    /// which loses to `cfprefsd` caching about as often as it works.
+    /// Release copy is worth being able to look at before it ships.
+    static var forcesWhatsNew: Bool {
+        ProcessInfo.processInfo.arguments.contains("-whatsNew")
+    }
+
     static var shareCardSeed: ShareCardSeed? {
         let args = ProcessInfo.processInfo.arguments
         guard let i = args.firstIndex(of: "-shareCard"), i + 1 < args.count else { return nil }

@@ -29,6 +29,18 @@ struct WhatsNewCard: View {
                     .tracking(1.5)
                     .foregroundStyle(Color.coral)
 
+                // The lead-in, when a release has one. Plain
+                // paragraphs, no shell: these are the sentence that
+                // frames the list rather than an item in it.
+                if let intro = note.intro {
+                    Text(intro)
+                        .font(.avenir(13, weight: .medium, italic: true))
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Color.ink.opacity(0.72))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 VStack(alignment: .leading, spacing: 11) {
                     ForEach(note.lines, id: \.self) { line in
                         HStack(alignment: .firstTextBaseline, spacing: 9) {
