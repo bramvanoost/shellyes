@@ -100,15 +100,14 @@ final class WhatsNew {
         Note(
             version: "1.6",
             title: "new this wave",
-            // The backfill fix is the headline even though it is the
-            // least visible thing in the release: it is the one that
-            // explains why somebody's history was missing from the
-            // boards. The "Also:" that separated it from the list in
-            // the draft is gone — the gap between the paragraph and the
-            // shells says the same thing without a word.
+            // Bram's words, as written. The intro carries the "Also:"
+            // too: it belongs to the paragraph rather than to the list,
+            // and a shell bullet in front of it would read as an item.
             intro: """
-                Scores and leaderboards seem… challenging.
+                Scores and leaderboards seem... challenging.
                 This wave tries to restore older scores + fixes some more thingses!
+
+                Also:
                 """,
             lines: [
                 "Tally has a soft skip now, for the impatient. Like me.",
