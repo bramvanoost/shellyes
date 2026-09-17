@@ -208,8 +208,16 @@ final class GameCenter {
 
     // MARK: - Submitting
 
-    func submit(_ value: Int, to board: Leaderboard) {
-        submit(value, toID: board.rawValue, shortKey: board.shortKey)
+    /// `landed` reports whether GameKit took the score. Live game
+    /// submissions ignore it — a lost score there is replaced by the
+    /// next game — but the one-time backfill has no second chance and
+    /// must know, see `backfillIfNeeded`.
+    func submit(
+        _ value: Int,
+        to board: Leaderboard,
+        landed: (@MainActor (Bool) -> Void)? = nil
+    ) {
+        submit(value, toID: board.rawValue, shortKey: board.shortKey, landed: landed)
     }
 
     /// The weekly twin of the same call. Recurring boards take a score
@@ -217,18 +225,33 @@ final class GameCenter {
     /// occurrence it lands in from the clock, not from anything the app
     /// sends.
     func submit(_ value: Int, to board: WeeklyLeaderboard) {
-        submit(value, toID: board.rawValue, shortKey: board.shortKey)
+        submit(value, toID: board.rawValue, shortKey: board.shortKey, landed: nil)
     }
 
-    private func submit(_ value: Int, toID id: String, shortKey: String) {
-        guard isAuthenticated else { return }
+    private func submit(
+        _ value: Int,
+        toID id: String,
+        shortKey: String,
+        landed: (@MainActor (Bool) -> Void)? = nil
+    ) {
+        guard isAuthenticated else {
+            // Not an error GameKit ever hears about, so nothing else
+            // reports it. A caller that needs to know gets a false.
+            landed?(false)
+            return
+        }
         GKLeaderboard.submitScore(
             value,
             context: 0,
             player: GKLocalPlayer.local,
             leaderboardIDs: [id]
         ) { [weak self] error in
-            guard let error else { return }
+            guard let error else {
+                if let landed {
+                    Task { @MainActor in landed(true) }
+                }
+                return
+            }
             #if DEBUG
             print("[GameCenter] score submit failed: \(error.localizedDescription)")
             #endif
@@ -238,6 +261,7 @@ final class GameCenter {
                     error: error,
                     extra: ["board": shortKey]
                 )
+                landed?(false)
             }
         }
     }
@@ -485,20 +509,56 @@ final class GameCenter {
     /// board would hand a player a rank they did not earn in the
     /// occurrence it lands in.
     func backfillIfNeeded(from stats: StatsStore) {
-        guard isAuthenticated, !defaults.bool(forKey: Key.didBackfillV2) else { return }
+        let scoresDone = defaults.bool(forKey: Key.didBackfill)
+        let achievementsDone = defaults.bool(forKey: Key.didBackfillV2)
+        // Both halves have to be done before this can stop running.
+        // `didBackfillV2` used to gate the whole function, which meant a
+        // score backfill that failed could never be retried even though
+        // its own flag was still unset.
+        guard isAuthenticated, !(scoresDone && achievementsDone) else { return }
 
         // Scores only on the first run. A player who already had the 1.2
         // backfill has these on the boards, and every board here takes
         // the best value rather than the latest, so re-submitting would
         // be noise rather than harm — but it is still five round trips
         // to tell Game Center something it already knows.
-        if !defaults.bool(forKey: Key.didBackfill) {
-            for run in stats.bestRuns {
-                submit(run.score, to: Leaderboard.score(forDifficulty: run.difficulty))
+        if !scoresDone {
+            var submissions = stats.bestRuns.map {
+                (Leaderboard.score(forDifficulty: $0.difficulty), $0.score)
             }
-            submit(stats.bestStreak, to: Leaderboard.bestStreak)
-            submit(stats.biggestKeep, to: Leaderboard.biggestKeep)
-            defaults.set(true, forKey: Key.didBackfill)
+            submissions.append((.bestStreak, stats.bestStreak))
+            submissions.append((.biggestKeep, stats.biggestKeep))
+
+            // The flag is written when the boards answer, never when the
+            // submissions are merely dispatched. `submit` is
+            // fire-and-forget, and writing it early is what marked
+            // thirteen failed backfills as done across four players —
+            // every one of them refused at the same second auth landed.
+            // See `BackfillTally`.
+            var tally = BackfillTally(expected: submissions.count)
+            for (board, value) in submissions {
+                submit(value, to: board) { [weak self] ok in
+                    guard let self else { return }
+                    tally.record(success: ok)
+                    guard tally.isComplete else { return }
+                    if tally.mayMarkDone {
+                        self.defaults.set(true, forKey: Key.didBackfill)
+                    } else {
+                        // Left unset on purpose: the next launch runs the
+                        // whole set again. Safe because every board is
+                        // BEST_SCORE, so re-sending a score it already
+                        // holds changes nothing.
+                        // No GameKit error to attach: the individual
+                        // refusals already went out as
+                        // `gamecenter_submit_failed`. This one says the
+                        // backfill as a whole is being retried.
+                        Telemetry.shared.track(
+                            "gamecenter_backfill_incomplete",
+                            props: ["failed": tally.failed, "expected": tally.expected]
+                        )
+                    }
+                }
+            }
         }
 
         // Achievements run every time the rules learn something new.
