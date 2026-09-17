@@ -709,7 +709,7 @@
   {
     "name": "lucky-at-the-cap",
     "seed": 3,
-    "luck": 0.1666666666666667,
+    "luck": 0.5,
     "playerIds": [
       "P0",
       "P1"

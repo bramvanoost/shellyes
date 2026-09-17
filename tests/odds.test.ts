@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { initialState, step, type Face, type Rng } from '../src/engine.js';
 import { bustChance, expectedRollGain, keepOptions } from '../src/odds.js';
-import { faceChance, luckyRng, type Rng } from '../src/engine.js';
+import { faceChance, faceWeights, luckyRng, type Rng } from '../src/engine.js';
 
 /// The same PRNG the sims and the parity harness use, so a bent stream
 /// can be counted here against a fair one from the same seed.
@@ -140,26 +140,33 @@ describe('keepOptions', () => {
 /// `ios/ShellYesEngine/Tests/ShellYesEngineTests/OddsTests.swift` —
 /// change one, change both, then run `node parity/diff.mjs`.
 describe('lucky dice', () => {
-  it('moves mass from the one onto the coin', () => {
-    expect(faceChance(6, 0.05)).toBeCloseTo(1 / 6 + 0.05, 12);
-    expect(faceChance(1, 0.05)).toBeCloseTo(1 / 6 - 0.05, 12);
-    for (const face of [2, 3, 4, 5] as const) {
-      expect(faceChance(face, 0.05)).toBeCloseTo(1 / 6, 12);
+  it('spreads the bonus over the three high faces', () => {
+    for (const face of [4, 5, 6] as const) {
+      expect(faceChance(face, 0.06)).toBeCloseTo(1 / 6 + 0.02, 12);
+    }
+    for (const face of [1, 2, 3] as const) {
+      expect(faceChance(face, 0.06)).toBeCloseTo(1 / 6 - 0.02, 12);
     }
   });
 
   it('never bends past the cap', () => {
-    // At 1/6 the 1 already never comes up; more than that is clamped.
-    expect(faceChance(1, 5)).toBeCloseTo(0, 12);
-    expect(faceChance(6, 5)).toBeCloseTo(1 / 3, 12);
+    // At 0.5 the low faces already never come up; more is clamped.
+    for (const face of [1, 2, 3] as const) {
+      expect(faceChance(face, 5)).toBeCloseTo(0, 12);
+    }
+    for (const face of [4, 5, 6] as const) {
+      expect(faceChance(face, 5)).toBeCloseTo(1 / 3, 12);
+    }
   });
 
-  it('still sums to one', () => {
-    const total = ([1, 2, 3, 4, 5, 6] as const).reduce(
-      (sum, f) => sum + faceChance(f, 0.05),
-      0,
-    );
-    expect(total).toBeCloseTo(1, 12);
+  it('sums to one however far it is bent', () => {
+    for (const luck of [0, 0.05, 0.2, 0.5]) {
+      const total = ([1, 2, 3, 4, 5, 6] as const).reduce(
+        (sum, f) => sum + faceChance(f, luck),
+        0,
+      );
+      expect(total).toBeCloseTo(1, 12);
+    }
   });
 
   it('makes spending the coin more dangerous than spending the one', () => {
@@ -181,21 +188,19 @@ describe('lucky dice', () => {
     expect(expectedRollGain([1, 2, 3, 4, 5, 6], 5, 0.05)).toBe(0);
   });
 
-  it('leaves the other four faces alone and spends one draw a die', () => {
-    const fair = mulberry32(99);
-    const lucky = luckyRng(mulberry32(99), 0.05);
-    const fairCounts = new Array(7).fill(0);
-    const luckyCounts = new Array(7).fill(0);
-    const rolls = 120_000;
-    for (let i = 0; i < rolls; i++) {
-      fairCounts[Math.floor(fair() * 6) + 1]++;
-      luckyCounts[Math.floor(lucky() * 6) + 1]++;
+  it('rolls the distribution it advertises, one draw a die', () => {
+    const lucky = luckyRng(mulberry32(99), 0.06);
+    const counts = new Array(7).fill(0);
+    const rolls = 240_000;
+    for (let i = 0; i < rolls; i++) counts[Math.floor(lucky() * 6) + 1]++;
+    for (const face of [1, 2, 3, 4, 5, 6] as const) {
+      expect(counts[face] / rolls).toBeCloseTo(faceChance(face, 0.06), 2);
     }
-    for (const face of [2, 3, 4, 5]) {
-      expect(luckyCounts[face]).toBe(fairCounts[face]);
-    }
-    expect(luckyCounts[6] / rolls).toBeCloseTo(1 / 6 + 0.05, 2);
-    expect(luckyCounts[1] / rolls).toBeCloseTo(1 / 6 - 0.05, 2);
+  });
+
+  it('still adds up to one whole die', () => {
+    const total = faceWeights(0.06).reduce((sum, w) => sum + w, 0);
+    expect(total).toBeCloseTo(1, 12);
   });
 
   it('is the fair stream at zero luck', () => {

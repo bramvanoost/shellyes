@@ -57,8 +57,9 @@ enum Difficulty: String, Codable, CaseIterable {
     }
 
     /// How far the *player's* dice are bent, and nobody else's. The
-    /// coin comes up `1/6 + luck` of the time and the 1 comes up
-    /// `1/6 - luck`; see `luckyRng` in `src/engine.ts` for the shape.
+    /// mass is shared over the three high faces and taken from the
+    /// three low ones, so each of 4, 5 and the coin gains `luck / 3`;
+    /// see `faceWeights` in `src/engine.ts` for the shape.
     ///
     /// Easy used to buy its whole win rate by making the bots greedy,
     /// at -0.20 a seat. That works — it measured 65.1% — but greedy

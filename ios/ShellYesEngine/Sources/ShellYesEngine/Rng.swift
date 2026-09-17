@@ -24,14 +24,16 @@ public struct Mulberry32: ShellYesRandom {
     }
 }
 
-/// A die that lands on the coin a little more often than a fair one,
-/// and on the 1 a little less. Mirror of `luckyRng` in `src/engine.ts`
-/// — change one, change both, then run `node parity/diff.mjs`.
+/// A die bent toward the high faces. Mirror of `luckyRng` in
+/// `src/engine.ts` — change one, change both, then run
+/// `node parity/diff.mjs`.
 ///
-/// `luck` is the probability mass moved: the coin comes up
-/// `1/6 + luck` of the time, the 1 comes up `1/6 - luck`, the other
-/// four faces are untouched. Exactly one draw from `base` per die, so
-/// a seed still replays a game step for step.
+/// `luck` is the total probability mass moved; `faceWeights` says
+/// where it goes. The remap is an inverse CDF: find which face the
+/// draw falls on under the bent distribution, then return a number
+/// inside that face's own fair slice. Exactly one draw from `base` per
+/// die, so a seed still replays a game step for step, and at `luck` 0
+/// every draw passes through untouched.
 ///
 /// It wraps rather than replaces the source, and hands the advanced
 /// `base` back out again, so a game can bend one seat's dice and leave
@@ -39,22 +41,29 @@ public struct Mulberry32: ShellYesRandom {
 public struct LuckyRandom<Base: ShellYesRandom>: ShellYesRandom {
     /// The source underneath, advanced by every draw taken here.
     public var base: Base
-    private let moved: Double
+    private let weights: [Double]
+    private let cumulative: [Double]
+    private let bent: Bool
 
     public init(base: Base, luck: Double) {
         self.base = base
-        self.moved = max(0, min(luck, maxLuck))
+        let moved = max(0, min(luck, maxLuck))
+        self.bent = moved > 0
+        self.weights = faceWeights(moved)
+        var acc = 0.0
+        self.cumulative = weights.map { acc += $0; return acc }
     }
 
     public mutating func next() -> Double {
         let u = base.next()
-        guard moved > 0 else { return u }
-        let sixth = 1.0 / 6.0
-        let keptLow = sixth - moved
-        // The top slice of the 1's range is folded into the coin's.
-        if u >= keptLow && u < sixth {
-            return 5.0 / 6.0 + ((u - keptLow) / moved) * sixth
-        }
-        return u
+        guard bent else { return u }
+        var i = 0
+        while i < 5 && u >= cumulative[i] { i += 1 }
+        let low = i == 0 ? 0 : cumulative[i - 1]
+        // Clamped just under 1 so the result can never round up into
+        // the next face's slice. The literal is spelled the same in
+        // both engines; the bias it introduces is a part in a trillion.
+        let within = min((u - low) / weights[i], 0.999999999999)
+        return (Double(i) + within) / 6.0
     }
 }

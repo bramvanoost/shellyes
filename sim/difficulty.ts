@@ -44,8 +44,9 @@ const SKILLS = [0.35, 0.5, 0.65];
 /// GameStore.swift. Keep the two in step — this file is what the
 /// comment there tells you to re-run.
 ///
-/// `luck` bends the *human's* dice and nobody else's: the coin comes
-/// up `1/6 + luck` of the time. Easy is the only tier that gets any.
+/// `luck` bends the *human's* dice and nobody else's: it moves that
+/// much probability mass off the three low faces and onto the three
+/// high ones. Easy is the only tier that gets any.
 const LADDER: Record<string, { seats: [number, number]; luck: number }> = {
   easy: { seats: [0.0, 0.0], luck: 0.05 },
   normal: { seats: [0.2, 0.0], luck: 0 },

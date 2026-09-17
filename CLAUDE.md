@@ -62,10 +62,16 @@ broken rather than as easy. Bram played 1.6 and said so.
 
 So Easy now sits at 0.00 a seat, where bots fail 49%, and the
 difference is paid back to the player as dice: `luckyRng` in
-`engine.ts` moves `luck` of the probability mass off the 1 and onto the
-coin, for the human seat only. At Easy's 0.05 the coin comes up 21.7%
-of the time instead of 16.7%. Measured 62.6% player wins at middling
-skill, monotone at every skill.
+`engine.ts` moves `luck` of the probability mass off the three low
+faces and onto the three high ones, for the human seat only. At Easy's
+0.05 each of 4, 5 and the coin goes from 16.7% to 18.3%, and each of
+1, 2 and 3 the other way.
+
+It was briefly the coin alone. That measured the same strength to
+within a point — the shape barely matters to the win rate — but it is
+a different thing to play: a coin faucet rather than kinder dice. It
+also carried a perverse edge, since an inflated coin is a bigger dead
+face once you keep it, so every roll after the coin got deadlier.
 
 Three rules around it:
 

@@ -126,24 +126,31 @@ final class OddsTests: XCTestCase {
 /// `tests/odds.test.ts` — change one, change both.
 final class LuckyDiceTests: XCTestCase {
 
-    func test_faceChance_movesMassFromTheOneOntoTheCoin() {
-        XCTAssertEqual(faceChance(.coin, luck: 0.05), 1.0 / 6.0 + 0.05, accuracy: 1e-12)
-        XCTAssertEqual(faceChance(.one, luck: 0.05), 1.0 / 6.0 - 0.05, accuracy: 1e-12)
-        for face in [Face.two, .three, .four, .five] {
-            XCTAssertEqual(faceChance(face, luck: 0.05), 1.0 / 6.0, accuracy: 1e-12)
+    func test_faceChance_spreadsTheBonusOverTheThreeHighFaces() {
+        for face in [Face.four, .five, .coin] {
+            XCTAssertEqual(faceChance(face, luck: 0.06), 1.0 / 6.0 + 0.02, accuracy: 1e-12)
+        }
+        for face in [Face.one, .two, .three] {
+            XCTAssertEqual(faceChance(face, luck: 0.06), 1.0 / 6.0 - 0.02, accuracy: 1e-12)
         }
     }
 
     func test_faceChance_neverBendsPastTheCap() {
         // Asking for more than the cap is clamped, not honoured: at
-        // 1/6 the 1 already never comes up.
-        XCTAssertEqual(faceChance(.one, luck: 5), 0, accuracy: 1e-12)
-        XCTAssertEqual(faceChance(.coin, luck: 5), 1.0 / 3.0, accuracy: 1e-12)
+        // 0.5 the low faces already never come up.
+        for face in [Face.one, .two, .three] {
+            XCTAssertEqual(faceChance(face, luck: 5), 0, accuracy: 1e-12)
+        }
+        for face in [Face.four, .five, .coin] {
+            XCTAssertEqual(faceChance(face, luck: 5), 1.0 / 3.0, accuracy: 1e-12)
+        }
     }
 
-    func test_faceChance_stillSumsToOne() {
-        let total = Face.allCases.reduce(0.0) { $0 + faceChance($1, luck: 0.05) }
-        XCTAssertEqual(total, 1, accuracy: 1e-12)
+    func test_faceChance_sumsToOneHoweverFarItIsBent() {
+        for luck in [0, 0.05, 0.2, 0.5] {
+            let total = Face.allCases.reduce(0.0) { $0 + faceChance($1, luck: luck) }
+            XCTAssertEqual(total, 1, accuracy: 1e-12)
+        }
     }
 
     /// The point of taking faces rather than a count: spending the
@@ -185,35 +192,23 @@ final class LuckyDiceTests: XCTestCase {
         )
     }
 
-    /// The remap has to leave the other four faces alone and spend
+    /// The remap has to roll the distribution it advertises and spend
     /// exactly one draw per die, or a seed would stop replaying.
-    func test_luckyRandom_movesOnlyTheOneAndTheCoin() {
-        var fair = Mulberry32(seed: 99)
-        var lucky = LuckyRandom(base: Mulberry32(seed: 99), luck: 0.05)
-        var fairCounts = [Int](repeating: 0, count: 7)
-        var luckyCounts = [Int](repeating: 0, count: 7)
-        let rolls = 120_000
+    func test_luckyRandom_rollsTheDistributionItAdvertises() {
+        var lucky = LuckyRandom(base: Mulberry32(seed: 99), luck: 0.06)
+        var counts = [Int](repeating: 0, count: 7)
+        let rolls = 240_000
         for _ in 0..<rolls {
-            fairCounts[Int(fair.next() * 6) + 1] += 1
-            luckyCounts[Int(lucky.next() * 6) + 1] += 1
+            counts[Int(lucky.next() * 6) + 1] += 1
         }
-        for face in 2...5 {
+        for face in Face.allCases {
             XCTAssertEqual(
-                luckyCounts[face],
-                fairCounts[face],
-                "face \(face) should be untouched by luck"
+                Double(counts[face.rawValue]) / Double(rolls),
+                faceChance(face, luck: 0.06),
+                accuracy: 0.005,
+                "face \(face.rawValue) came up at the wrong rate"
             )
         }
-        XCTAssertEqual(
-            Double(luckyCounts[6]) / Double(rolls),
-            1.0 / 6.0 + 0.05,
-            accuracy: 0.005
-        )
-        XCTAssertEqual(
-            Double(luckyCounts[1]) / Double(rolls),
-            1.0 / 6.0 - 0.05,
-            accuracy: 0.005
-        )
     }
 
     func test_luckyRandom_atZeroIsTheFairStream() {

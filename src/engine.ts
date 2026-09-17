@@ -105,14 +105,46 @@ export function bankOptions(state: State): BankOption[] {
   return options;
 }
 
-/// Most a die may be bent. At `1/6` the weakest face would never come
-/// up at all, which is a different game rather than a kinder one.
-export const MAX_LUCK = 1 / 6;
+/// Most a die may be bent. `luck` is shared out over the three high
+/// faces and taken from the three low ones, so at `0.5` the 1, 2 and 3
+/// never come up at all — which is a different game rather than a
+/// kinder one.
+export const MAX_LUCK = 0.5;
 
-/// A die that lands on the coin a little more often than a fair one,
-/// and on the 1 a little less. `luck` is the probability mass moved:
-/// the coin comes up `1/6 + luck` of the time, the 1 comes up
-/// `1/6 - luck`, and the other four faces are untouched.
+/// How often each face comes up, lowest first, on a die bent by
+/// `luck`.
+///
+/// The bonus is spread over the three high faces and paid for by the
+/// three low ones: each of 4, 5 and the coin gains `luck / 3`, each of
+/// 1, 2 and 3 loses the same. At Easy's 0.05 that is a face going from
+/// 16.7% to 18.3%, three times over.
+///
+/// It was briefly the coin alone, which measured the same strength to
+/// within a point but is a different thing to play: a coin faucet
+/// rather than kinder dice. It also had a perverse edge — an inflated
+/// coin is a bigger dead face once you keep it, so every roll after
+/// the coin got deadlier.
+export function faceWeights(luck: number = 0): number[] {
+  const moved = Math.max(0, Math.min(luck, MAX_LUCK)) / 3;
+  const sixth = 1 / 6;
+  return [
+    sixth - moved,
+    sixth - moved,
+    sixth - moved,
+    sixth + moved,
+    sixth + moved,
+    sixth + moved,
+  ];
+}
+
+/// Chance one die shows `face`, given how far it is bent. Fair dice
+/// (`luck` 0) give every face `1/6`.
+export function faceChance(face: Face, luck: number = 0): number {
+  return faceWeights(luck)[face - 1];
+}
+
+/// A die bent toward the high faces. `luck` is the total probability
+/// mass moved; see `faceWeights` for where it goes.
 ///
 /// This is the app's Easy handicap, and it is the ONLY sanctioned way
 /// to bend a roll. It lives here, next to `rollDie`, because it is the
@@ -120,9 +152,13 @@ export const MAX_LUCK = 1 / 6;
 /// to which face — a wrapper written anywhere else would be guessing
 /// at that mapping and would break silently if `rollDie` changed.
 ///
-/// Exactly one draw from `base` per die, same as a fair roll, so a seed
-/// still replays a game step for step and the parity harness can hold
-/// both engines to the same sequence.
+/// The remap is an inverse CDF: find which face `u` falls on under the
+/// bent distribution, then return a number inside *that* face's own
+/// fair slice. Exactly one draw from `base` per die, same as a fair
+/// roll, so a seed still replays a game step for step and the parity
+/// harness can hold both engines to the same sequence. At `luck` 0 the
+/// bent slices are the fair ones and every draw passes through
+/// untouched.
 ///
 /// The odds the app quotes are not left behind: `bustChance`,
 /// `expectedRollGain` and `keepOptions` in `odds.ts` all take the same
@@ -132,25 +168,24 @@ export const MAX_LUCK = 1 / 6;
 export function luckyRng(base: Rng, luck: number): Rng {
   const moved = Math.max(0, Math.min(luck, MAX_LUCK));
   if (moved === 0) return base;
-  const sixth = 1 / 6;
-  const keptLow = sixth - moved;
+  const weights = faceWeights(moved);
+  const cumulative: number[] = [];
+  let acc = 0;
+  for (const w of weights) {
+    acc += w;
+    cumulative.push(acc);
+  }
   return () => {
     const u = base();
-    // The top slice of the 1's range is folded into the coin's.
-    if (u >= keptLow && u < sixth) {
-      return 5 / 6 + ((u - keptLow) / moved) * sixth;
-    }
-    return u;
+    let i = 0;
+    while (i < 5 && u >= cumulative[i]) i++;
+    const low = i === 0 ? 0 : cumulative[i - 1];
+    // Clamped just under 1 so the result can never round up into the
+    // next face's slice. The literal is spelled the same in both
+    // engines; the bias it introduces is a part in a trillion.
+    const within = Math.min((u - low) / weights[i], 0.999999999999);
+    return (i + within) / 6;
   };
-}
-
-/// Chance one die shows `face`, given how far it is bent. Fair dice
-/// (`luck` 0) give every face `1/6`.
-export function faceChance(face: Face, luck: number = 0): number {
-  const moved = Math.max(0, Math.min(luck, MAX_LUCK));
-  if (face === COIN) return 1 / 6 + moved;
-  if (face === 1) return 1 / 6 - moved;
-  return 1 / 6;
 }
 
 function rollDie(rng: Rng): Face {
