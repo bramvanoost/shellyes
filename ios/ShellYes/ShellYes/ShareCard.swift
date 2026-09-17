@@ -328,8 +328,8 @@ struct ShareCardView: View {
     }
 }
 
-/// The claim pill: a crown and "Top Banana" for the week, palms and
-/// "Big Kahuna" for all time.
+/// The claim pill: a pair of crowns around "Top Banana" for the week,
+/// a pair of palms around "Big Kahuna" for all time.
 ///
 /// Its own view so both tiers are measurably one shape. The tier
 /// differences are colour and mark, never size: a Big Kahuna badge that
@@ -368,7 +368,12 @@ struct ClaimBadge: View {
                 // as centred.
                 .offset(y: 1.5)
 
-            if isKahuna { mark("laurel.trailing") }
+            // Both marks come in pairs, matching the splash badge in
+            // `StandingLine`. A lone leading crown left the Top Banana
+            // pill lopsided while the Big Kahuna one was symmetrical,
+            // which read as the weekly tier being half-dressed rather
+            // than as a lesser rank.
+            mark(isKahuna ? "laurel.trailing" : "crown.fill")
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 22)
