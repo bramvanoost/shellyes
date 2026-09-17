@@ -43,6 +43,9 @@ struct CountingCeremony: View {
     var onStepUpDifficulty: () -> Void = {}
 
     @Environment(\.requestReview) private var requestReview
+    /// The skip wave rides wall time, so it is the one thing here
+    /// that has to be told to hold still.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @SwiftUI.State private var revealedPlayer: Int = -1   // index currently or last animated
     @SwiftUI.State private var tickedTotals: [Int] = []
@@ -52,6 +55,9 @@ struct CountingCeremony: View {
     @SwiftUI.State private var humanWinHeadlineSparkle: Int = 0
     @SwiftUI.State private var showNudge: Bool = false
     @SwiftUI.State private var nudgeAnswered: Bool = false
+    /// Set once, never unset: the player has asked for the end of
+    /// the count rather than the count.
+    @SwiftUI.State private var skipped: Bool = false
 
     private var winnerIndices: [Int] {
         guard let top = scores.max() else { return [] }
@@ -158,6 +164,59 @@ struct CountingCeremony: View {
                 .animation(.easeOut(duration: 0.5), value: winnerRevealed)
 
                 Spacer()
+
+                // A soft way out of the count. Every number on this
+                // screen was decided before it appeared, so the
+                // ceremony is a courtesy and a player who has seen it
+                // enough times should be able to wave it past. Quiet
+                // enough to miss on a first playthrough, in the same
+                // language as HOME below, and gone the moment the
+                // winner lands — there is nothing left to skip by then.
+                if !winnerRevealed {
+                    Button(action: skipCeremony) {
+                        VStack(spacing: 5) {
+                            Text("SKIP")
+                                .font(.avenir(12, weight: .demiBold))
+                                .tracking(2.5)
+                            // The app's own countdown glyph, run quick.
+                            // QuietAICard's calm swells are 64/44/30 and
+                            // the banner countdowns are 10; 13 across
+                            // this width gives four and a half crests,
+                            // which still reads as water. Tighter than
+                            // that and it crams into a zigzag — the
+                            // hurry has to come from the phase speed
+                            // rather than from the wavelength, or the
+                            // wave stops being a wave. Phase rides wall
+                            // time so it keeps travelling while the
+                            // counters tick.
+                            TimelineView(.animation) { context in
+                                let t = reduceMotion
+                                    ? 0
+                                    : context.date.timeIntervalSinceReferenceDate
+                                WaveLine(
+                                    wavelength: 13,
+                                    amplitude: 2.5,
+                                    phase: CGFloat(t) * 5.5
+                                )
+                                .stroke(Color.ink.opacity(0.34), lineWidth: 1.3)
+                            }
+                            .frame(width: 60, height: 10)
+                        }
+                        .foregroundStyle(Color.ink.opacity(0.42))
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        // Quiet is a look, not a hit area. The label and
+                        // wave together are about 29pt tall, which left
+                        // the tappable box under Apple's 44pt minimum.
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("skipTally")
+                    .accessibilityLabel("Skip the count")
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
+                }
 
                 if showNudge {
                     DifficultyNudgeCard(
@@ -372,34 +431,71 @@ struct CountingCeremony: View {
         Pearl(diameter: size)
     }
 
+    /// One beat of the ceremony. Returns whether the ceremony should
+    /// keep going, so each step reads as "wait, then check we still
+    /// want to be here".
+    ///
+    /// Skipping deliberately does not cancel the task. Everything after
+    /// the count — the fanfare, the winner reveal, the buttons — is the
+    /// destination rather than part of the wait, so the same function
+    /// still has to run to the end. It just stops sleeping.
+    private func settle(_ nanoseconds: UInt64) async -> Bool {
+        if skipped { return false }
+        try? await Task.sleep(nanoseconds: nanoseconds)
+        return !skipped
+    }
+
+    /// Jumps to the end of the count.
+    ///
+    /// Safe by construction: the scores were final before this screen
+    /// was built, `tickedTotals` is only ever a display of them, and the
+    /// winner is derived from `scores` rather than from what has been
+    /// counted so far. The only thing given up is the ceremony.
+    private func skipCeremony() {
+        guard !skipped, !winnerRevealed else { return }
+        skipped = true
+        Telemetry.shared.track("tally_skipped", props: [
+            "players": players.count,
+            // How far in they were. If this clusters at 0 the ceremony
+            // is being skipped on sight and its length is the problem,
+            // not its existence.
+            "counted": max(0, revealedPlayer),
+        ])
+    }
+
     private func runCeremony() async {
         // Initialize tickedTotals as zeros for each player.
         tickedTotals = Array(repeating: 0, count: players.count)
 
         // Brief moment to let "counting…" settle in.
-        try? await Task.sleep(nanoseconds: 600_000_000)
-
-        for i in players.indices {
-            revealedPlayer = i
-            let target = scores[i]
-            if target == 0 {
-                // Just pause to acknowledge them, then move on.
-                try? await Task.sleep(nanoseconds: 350_000_000)
-            } else {
-                // Tick from 0 to target. Per-step delay scales so the whole
-                // count takes ~1.0–1.4s regardless of size.
-                let stepNs: UInt64 = UInt64(max(40_000_000, min(140_000_000, 1_200_000_000 / UInt64(max(1, target)))))
-                for v in 1...target {
-                    tickedTotals[i] = v
-                    GameSFX.shared.playCountTick()
-                    try? await Task.sleep(nanoseconds: stepNs)
+        if await settle(600_000_000) {
+            counting: for i in players.indices {
+                revealedPlayer = i
+                let target = scores[i]
+                if target == 0 {
+                    // Just pause to acknowledge them, then move on.
+                    if await settle(350_000_000) == false { break counting }
+                } else {
+                    // Tick from 0 to target. Per-step delay scales so the whole
+                    // count takes ~1.0–1.4s regardless of size.
+                    let stepNs: UInt64 = UInt64(max(40_000_000, min(140_000_000, 1_200_000_000 / UInt64(max(1, target)))))
+                    for v in 1...target {
+                        tickedTotals[i] = v
+                        GameSFX.shared.playCountTick()
+                        if await settle(stepNs) == false { break counting }
+                    }
+                    if await settle(350_000_000) == false { break counting }
                 }
-                try? await Task.sleep(nanoseconds: 350_000_000)
             }
         }
 
+        // Whether the count ran or was cut short, the totals on screen
+        // have to be the real ones before anyone is called the winner.
+        tickedTotals = scores
+        revealedPlayer = players.count - 1
+
         // All players counted — pause, then reveal winner.
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        _ = await settle(400_000_000)
         if winnerIndices.contains(GameStore.humanSeat) {
             GameSFX.shared.playWinFanfare()
         } else {
@@ -409,8 +505,9 @@ struct CountingCeremony: View {
             winnerRevealed = true
         }
 
-        // Pause for impact, then show New Game.
-        try? await Task.sleep(nanoseconds: 900_000_000)
+        // Pause for impact, then show New Game. A skipped count has
+        // no impact to pause for.
+        _ = await settle(900_000_000)
         withAnimation(.easeOut(duration: 0.4)) {
             showNewGame = true
         }
