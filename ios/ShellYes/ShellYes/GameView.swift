@@ -51,6 +51,14 @@ struct GameView: View {
     /// number snaps to 0 while the fake dice are still tumbling — the
     /// player sees their total wiped before they're told they busted.
     @SwiftUI.State private var bustFrozenSetAside: [Face]? = nil
+    /// Frozen alongside `bustFrozenSetAside`, and not optional for
+    /// tidiness: the tally row draws one slot per set-aside die plus
+    /// one per die in hand, and the engine guarantees those two sum
+    /// to `TOTAL_DICE`. Freezing one without the other broke that
+    /// sum on every bust — `endTurn` had already reset dice in hand
+    /// to 8 while the row still drew the pre-bust set-aside dice, so
+    /// the player saw fifteen slots for an eight-die game.
+    @SwiftUI.State private var bustFrozenDiceInHand: Int? = nil
     /// And freeze every vault, because a bust returns the player's top
     /// shell to the sand the instant `apply` returns. Without this the
     /// shell vanishes off their stack a full `rollBustVisualDelay`
@@ -221,6 +229,10 @@ struct GameView: View {
         bustFrozenSetAside ?? store.state.setAside
     }
 
+    private var displayedDiceInHand: Int {
+        bustFrozenDiceInHand ?? store.state.diceInHand
+    }
+
     private func act(_ action: Action) {
         let humanSeat = GameStore.humanSeat
         let wasHumanTurn = store.isHumanTurn
@@ -300,6 +312,7 @@ struct GameView: View {
                     bustFrozenCurrent = beforeCurrent
                     bustFrozenPhaseHint = beforePhaseHint
                     bustFrozenSetAside = beforeSetAside
+                    bustFrozenDiceInHand = beforeDiceInHand
                     bustFrozenPlayers = beforePlayers
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: rollBustVisualDelayNs)
@@ -309,6 +322,7 @@ struct GameView: View {
                         bustFrozenCurrent = nil
                         bustFrozenPhaseHint = nil
                         bustFrozenSetAside = nil
+                        bustFrozenDiceInHand = nil
                         bustFrozenPlayers = nil
                     }
                 } else {
@@ -443,6 +457,7 @@ struct GameView: View {
         bustFrozenCurrent = nil
         bustFrozenPhaseHint = nil
         bustFrozenSetAside = nil
+        bustFrozenDiceInHand = nil
         burnedTile = nil
         bustReturnedTile = nil
         stolenFromIdx = nil
@@ -796,7 +811,7 @@ struct GameView: View {
                             setAsideSum: displayedSetAside.reduce(0) { $0 + $1.value },
                             rolled: bustAnimatedRoll ?? store.state.rolled,
                             locked: displayedSetAside,
-                            diceInHand: store.state.diceInHand,
+                            diceInHand: displayedDiceInHand,
                             isHumanTurn: displayIsHumanTurn,
                             canPick: { store.canPick($0) },
                             onPick: { act(.pick(face: $0)) },
