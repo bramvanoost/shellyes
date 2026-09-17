@@ -134,6 +134,73 @@ final class StandingsTests: XCTestCase {
         XCTAssertEqual(tied.crownTitle, "Big Kahuna")
     }
 
+    /// The splash printed "2nd of 20" at a four-way tie on 35, which
+    /// is Game Center's tie-break shown as though it were the
+    /// standing. The board card beside it crowned all four.
+    func test_summary_saysTiedFirstWhenTheTopScoreIsShared() {
+        let tied = BoardStanding(
+            boardID: WeeklyLeaderboard.biggestKeep.rawValue,
+            period: .week,
+            rank: 2,
+            total: 20,
+            score: 35,
+            topScore: 35
+        )
+
+        XCTAssertTrue(tied.isTiedAtTop)
+        XCTAssertEqual(tied.displayRank, 1)
+        XCTAssertEqual(tied.summary, "tied 1st of 20")
+    }
+
+    /// Alone at the top says so plainly: there is nobody to be tied
+    /// with, and "tied 1st" would invent one.
+    func test_summary_atRankOneAloneDoesNotSayTied() {
+        let alone = BoardStanding(
+            boardID: WeeklyLeaderboard.biggestKeep.rawValue,
+            period: .week,
+            rank: 1,
+            total: 20,
+            score: 35,
+            topScore: 35
+        )
+
+        XCTAssertFalse(alone.isTiedAtTop)
+        XCTAssertEqual(alone.summary, "1st of 20")
+    }
+
+    /// Below the top, the reported rank is the rank. A tie down there
+    /// is invisible from a fetch that knows only the leading score and
+    /// the player's own.
+    func test_summary_belowTheTopIsUnchanged() {
+        let twelfth = BoardStanding(
+            boardID: WeeklyLeaderboard.biggestKeep.rawValue,
+            period: .week,
+            rank: 12,
+            total: 340,
+            score: 20,
+            topScore: 35
+        )
+
+        XCTAssertEqual(twelfth.displayRank, 12)
+        XCTAssertEqual(twelfth.summary, "12th of 340")
+    }
+
+    /// The crowned sub-line reads off `summary`, so the share card and
+    /// the board sheet heading inherit the fix rather than repeating
+    /// the bug.
+    func test_crownContextLine_carriesTheTie() {
+        let tied = BoardStanding(
+            boardID: WeeklyLeaderboard.biggestKeep.rawValue,
+            period: .week,
+            rank: 3,
+            total: 20,
+            score: 35,
+            topScore: 35
+        )
+
+        XCTAssertTrue(tied.crownContextLine.hasPrefix("tied 1st of 20 · "))
+    }
+
     func test_isTop_belowTheLeadingScore_isNotTop() {
         let second = BoardStanding(
             boardID: Leaderboard.scoreEasy.rawValue, period: .allTime,

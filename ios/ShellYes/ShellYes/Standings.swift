@@ -120,17 +120,43 @@ struct BoardStanding: Codable, Equatable, Identifiable {
         boardPhrase.replacingOccurrences(of: ", ", with: " · ")
     }
 
+    /// Level with the leader but not first in line for it. Game Center
+    /// ranks a tie by who posted first, so three players on 35 come
+    /// back as ranks 1, 2 and 3.
+    var isTiedAtTop: Bool { isTop && rank > 1 }
+
+    /// The place to *show*, which is not always the place Game Center
+    /// reports. Everyone tied at the top score is in first, so they are
+    /// shown first — the same rule `BoardRow.crownedRanks` uses to hand
+    /// a crown to every row on the leading score.
+    ///
+    /// Below the top it is the reported rank, unchanged. A tie further
+    /// down cannot be spotted from here: the fetch knows the leading
+    /// score and the player's own, and nothing in between.
+    var displayRank: Int { isTop ? 1 : rank }
+
     /// "1st", "12th", "23rd" — localized, because English's ordinal
     /// rules are not every language's.
     var ordinal: String {
-        Self.ordinalFormatter.string(from: NSNumber(value: rank)) ?? "\(rank)"
+        Self.ordinalFormatter.string(from: NSNumber(value: displayRank)) ?? "\(displayRank)"
     }
 
-    /// The quiet line: "12th of 340". Unlabelled, because the line has
-    /// to survive next to a board phrase on one row of a phone screen,
-    /// and "Rank:" is the first thing worth spending to keep it there.
+    /// The quiet line: "12th of 340", or "tied 1st of 20" when the top
+    /// score is shared.
+    ///
+    /// Unlabelled, because the line has to survive next to a board
+    /// phrase on one row of a phone screen, and "Rank:" is the first
+    /// thing worth spending to keep it there.
+    ///
+    /// The word "tied" is not decoration. Bram held a share of the top
+    /// score on four-way 35s and the splash told him "2nd of 20",
+    /// which is Game Center's tie-break printed as though it were the
+    /// standing — it says you are behind over a number the board
+    /// plainly shows is level. Bare "1st" would be true by the usual
+    /// convention and still read as a lie next to a board showing
+    /// three other crowns, so the line says which of the two it is.
     var summary: String {
-        "\(ordinal) of \(total)"
+        isTiedAtTop ? "tied \(ordinal) of \(total)" : "\(ordinal) of \(total)"
     }
 
     /// The line under a crowned title: "1st of 340 · easy · all time".
