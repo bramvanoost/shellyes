@@ -33,6 +33,11 @@ than at one assumed skill.
 Dice are unchanged and identical across difficulties. Difficulty has
 never moved the odds of a roll, only how the AI plays one.
 
+*(No longer true as of 1.7: Easy bends the player's dice toward the
+coin, and `odds.ts` was taught the weights so the figures the app
+quotes stay honest. Normal and Hard are still fair. See "Easy bends the
+player's dice" in CLAUDE.md.)*
+
 New `npm run sim:difficulty` is the harness. It fails the build if any
 tier stops being harder than the one below it, at any skill — the check
 the two-seat `npm run sim` structurally could not make.

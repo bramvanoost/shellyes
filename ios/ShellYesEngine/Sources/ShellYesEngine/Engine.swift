@@ -101,6 +101,20 @@ func applyBank(_ state: State, target: BankOption) -> State {
     return commitBank(state, target: target)
 }
 
+/// Most a die may be bent. At `1/6` the weakest face would never come
+/// up at all, which is a different game rather than a kinder one.
+public let maxLuck = 1.0 / 6.0
+
+/// Chance one die shows `face`, given how far it is bent. Fair dice
+/// (`luck` 0) give every face `1/6`. Mirror of `faceChance` in
+/// `src/engine.ts`.
+public func faceChance(_ face: Face, luck: Double = 0) -> Double {
+    let moved = max(0, min(luck, maxLuck))
+    if face == .coin { return 1.0 / 6.0 + moved }
+    if face.rawValue == 1 { return 1.0 / 6.0 - moved }
+    return 1.0 / 6.0
+}
+
 func rollDie<R: ShellYesRandom>(rng: inout R) -> Face {
     let n = Int(rng.next() * 6) + 1
     let clamped = max(1, min(6, n))

@@ -20,7 +20,7 @@
 // is a stand-in for player skill, not a claim about it. The absolute
 // numbers move with that stand-in; the ordering is what's being tested.
 
-import { initialState, step, score, type Rng } from '../src/engine.js';
+import { initialState, luckyRng, step, score, type Rng } from '../src/engine.js';
 import { decide } from '../src/ai.js';
 
 function mulberry32(seed: number): Rng {
@@ -40,30 +40,40 @@ const MAX_STEPS = 200_000;
 /// Stand-ins for weak, middling and strong play.
 const SKILLS = [0.35, 0.5, 0.65];
 
-/// Mirrors `Difficulty.seatDiscipline` in GameStore.swift. Keep the two
-/// in step — this file is what the comment there tells you to re-run.
-const LADDER: Record<string, [number, number]> = {
-  easy: [-0.2, -0.2],
-  normal: [0.2, 0.0],
-  hard: [0.2, 0.5],
+/// Mirrors `Difficulty.seatDiscipline` and `Difficulty.luck` in
+/// GameStore.swift. Keep the two in step — this file is what the
+/// comment there tells you to re-run.
+///
+/// `luck` bends the *human's* dice and nobody else's: the coin comes
+/// up `1/6 + luck` of the time. Easy is the only tier that gets any.
+const LADDER: Record<string, { seats: [number, number]; luck: number }> = {
+  easy: { seats: [0.0, 0.0], luck: 0.05 },
+  normal: { seats: [0.2, 0.0], luck: 0 },
+  hard: { seats: [0.2, 0.5], luck: 0 },
 };
 
-/// Bram's targets, roughly. Easy at 0.00, the floor of the knob's
-/// documented 0..1 range, only reached 58.6% and played as a coin
-/// flip, so it now runs negative. See `Difficulty.seatDiscipline` in
-/// GameStore.swift for why that is meaningful and where it saturates.
-const TARGETS: Record<string, number> = { easy: 65.2, normal: 50, hard: 40 };
+/// Bram's targets, roughly.
+///
+/// Easy used to buy its win rate entirely by making the bots greedy,
+/// at -0.20 a seat, and greedy bots fail 56% of their turns — which
+/// reads as a table of idiots rather than an easy game. It now sits at
+/// 0.00, where they fail 49%, and the difference is paid back in the
+/// human's dice instead.
+const TARGETS: Record<string, number> = { easy: 63, normal: 50, hard: 40 };
 
 /// Easy has to clear this at middling skill, not merely beat Normal.
 /// A ladder can be perfectly monotone and still open on a tier nobody
 /// would call easy, which is what 1.3 shipped.
 const EASY_FLOOR = 60;
 
-function humanWinRate(skill: number, seats: [number, number]): number {
+function humanWinRate(skill: number, seats: [number, number], luck: number): number {
   const discipline = [skill, seats[0], seats[1]];
   let wins = 0;
   for (let g = 0; g < GAMES; g++) {
-    const rng = mulberry32(g + 1);
+    const base = mulberry32(g + 1);
+    // One bent view of the same stream, handed to seat 0 only. The
+    // bots keep rolling the fair dice off `base`.
+    const lucky = luckyRng(base, luck);
     let state = initialState(['you', 'one', 'two']);
     let steps = 0;
     while (state.phase !== 'over') {
@@ -71,7 +81,11 @@ function humanWinRate(skill: number, seats: [number, number]): number {
         console.error(`skill ${skill} vs [${seats}]: game ${g} never terminated`);
         process.exit(1);
       }
-      state = step(state, decide(state, { discipline: discipline[state.current] }), rng);
+      state = step(
+        state,
+        decide(state, { discipline: discipline[state.current] }),
+        state.current === 0 ? lucky : base,
+      );
     }
     const scores = score(state);
     if (scores[0] === Math.max(...scores)) wins++;
@@ -84,12 +98,12 @@ let failed = false;
 for (const skill of SKILLS) {
   console.log(`\nplayer skill ${skill.toFixed(2)}  (${GAMES} games per difficulty)`);
   const rates: number[] = [];
-  for (const [name, seats] of Object.entries(LADDER)) {
-    const rate = humanWinRate(skill, seats);
+  for (const [name, { seats, luck }] of Object.entries(LADDER)) {
+    const rate = humanWinRate(skill, seats, luck);
     rates.push(rate);
     const drift = rate - TARGETS[name];
     console.log(
-      `  ${name.padEnd(7)}[${seats.map((s) => s.toFixed(2)).join(', ')}]  ` +
+      `  ${name.padEnd(7)}[${seats.map((s) => s.toFixed(2)).join(', ')}] luck ${luck.toFixed(2)}  ` +
         `${rate.toFixed(1)}%  (target ${TARGETS[name]}, ${drift >= 0 ? '+' : ''}${drift.toFixed(1)})`,
     );
   }

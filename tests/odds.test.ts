@@ -1,6 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { initialState, step, type Face, type Rng } from '../src/engine.js';
 import { bustChance, expectedRollGain, keepOptions } from '../src/odds.js';
+import { faceChance, luckyRng, type Rng } from '../src/engine.js';
+
+/// The same PRNG the sims and the parity harness use, so a bent stream
+/// can be counted here against a fair one from the same seed.
+function mulberry32(seed: number): Rng {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function rngForFaces(faces: Face[]): Rng {
   let i = 0;
@@ -13,19 +27,19 @@ function rngForFaces(faces: Face[]): Rng {
 
 describe('bustChance', () => {
   it('is zero with nothing picked yet', () => {
-    expect(bustChance(0, 8)).toBe(0);
+    expect(bustChance([], 8)).toBe(0);
   });
 
   it('is one face in six for a single die over one dead face', () => {
-    expect(bustChance(1, 1)).toBeCloseTo(1 / 6, 12);
+    expect(bustChance([1], 1)).toBeCloseTo(1 / 6, 12);
   });
 
   it('compounds across dice', () => {
-    expect(bustChance(3, 2)).toBeCloseTo(0.25, 12);
+    expect(bustChance([1, 2, 3], 2)).toBeCloseTo(0.25, 12);
   });
 
   it('is certain once every face is spent', () => {
-    expect(bustChance(6, 4)).toBe(1);
+    expect(bustChance([1, 2, 3, 4, 5, 6], 4)).toBe(1);
   });
 });
 
@@ -118,5 +132,75 @@ describe('keepOptions', () => {
 
     const options = keepOptions(s);
     expect(options.some((o) => o.face === 6)).toBe(false);
+  });
+});
+
+/// The Easy handicap: a die bent toward the coin, and the odds that
+/// have to know about it. Mirror of `LuckyDiceTests` in
+/// `ios/ShellYesEngine/Tests/ShellYesEngineTests/OddsTests.swift` —
+/// change one, change both, then run `node parity/diff.mjs`.
+describe('lucky dice', () => {
+  it('moves mass from the one onto the coin', () => {
+    expect(faceChance(6, 0.05)).toBeCloseTo(1 / 6 + 0.05, 12);
+    expect(faceChance(1, 0.05)).toBeCloseTo(1 / 6 - 0.05, 12);
+    for (const face of [2, 3, 4, 5] as const) {
+      expect(faceChance(face, 0.05)).toBeCloseTo(1 / 6, 12);
+    }
+  });
+
+  it('never bends past the cap', () => {
+    // At 1/6 the 1 already never comes up; more than that is clamped.
+    expect(faceChance(1, 5)).toBeCloseTo(0, 12);
+    expect(faceChance(6, 5)).toBeCloseTo(1 / 3, 12);
+  });
+
+  it('still sums to one', () => {
+    const total = ([1, 2, 3, 4, 5, 6] as const).reduce(
+      (sum, f) => sum + faceChance(f, 0.05),
+      0,
+    );
+    expect(total).toBeCloseTo(1, 12);
+  });
+
+  it('makes spending the coin more dangerous than spending the one', () => {
+    // The point of taking faces rather than a count. On a fair die the
+    // two are the same; on a bent one they are not.
+    expect(bustChance([6], 2, 0.05)).toBeGreaterThan(bustChance([1], 2, 0.05));
+    expect(bustChance([6], 2)).toBeCloseTo(bustChance([1], 2), 12);
+  });
+
+  it('is the fair formula at zero luck', () => {
+    expect(bustChance([1, 2, 3], 3)).toBeCloseTo(0.5 ** 3, 12);
+  });
+
+  it('is worth more per roll, which is the point of granting it', () => {
+    expect(expectedRollGain([], 4, 0.05)).toBeGreaterThan(expectedRollGain([], 4));
+  });
+
+  it('is still worth nothing when every face is spent', () => {
+    expect(expectedRollGain([1, 2, 3, 4, 5, 6], 5, 0.05)).toBe(0);
+  });
+
+  it('leaves the other four faces alone and spends one draw a die', () => {
+    const fair = mulberry32(99);
+    const lucky = luckyRng(mulberry32(99), 0.05);
+    const fairCounts = new Array(7).fill(0);
+    const luckyCounts = new Array(7).fill(0);
+    const rolls = 120_000;
+    for (let i = 0; i < rolls; i++) {
+      fairCounts[Math.floor(fair() * 6) + 1]++;
+      luckyCounts[Math.floor(lucky() * 6) + 1]++;
+    }
+    for (const face of [2, 3, 4, 5]) {
+      expect(luckyCounts[face]).toBe(fairCounts[face]);
+    }
+    expect(luckyCounts[6] / rolls).toBeCloseTo(1 / 6 + 0.05, 2);
+    expect(luckyCounts[1] / rolls).toBeCloseTo(1 / 6 - 0.05, 2);
+  });
+
+  it('is the fair stream at zero luck', () => {
+    const fair = mulberry32(7);
+    const lucky = luckyRng(mulberry32(7), 0);
+    for (let i = 0; i < 500; i++) expect(lucky()).toBe(fair());
   });
 });

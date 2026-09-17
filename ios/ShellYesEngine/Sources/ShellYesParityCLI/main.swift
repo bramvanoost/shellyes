@@ -15,6 +15,9 @@ struct ParityCase: Codable {
     let seed: UInt32
     let playerIds: [String]
     let actions: [ActionDTO]
+    /// How far the dice are bent, which is the app's Easy handicap.
+    /// Absent in a fair case, which is most of them.
+    let luck: Double?
 }
 
 struct ParityOdds: Codable {
@@ -46,17 +49,19 @@ func fixed(_ x: Double) -> Int {
     Int((x * oddsScale).rounded())
 }
 
-func oddsFor(_ state: State) -> ParityOdds {
+func oddsFor(_ state: State, luck: Double) -> ParityOdds {
     ParityOdds(
         bust: fixed(bustChance(
-            pickedCount: state.pickedFaces.count,
-            diceInHand: state.diceInHand
+            pickedFaces: state.pickedFaces,
+            diceInHand: state.diceInHand,
+            luck: luck
         )),
         ev: fixed(expectedRollGain(
             pickedFaces: state.pickedFaces,
-            diceInHand: state.diceInHand
+            diceInHand: state.diceInHand,
+            luck: luck
         )),
-        keeps: keepOptions(state).map { k in
+        keeps: keepOptions(state, luck: luck).map { k in
             ParityOdds.Keep(
                 face: k.face.rawValue,
                 count: k.count,
@@ -113,7 +118,11 @@ do {
     exit(1)
 }
 
-var rng = Mulberry32(seed: testCase.seed)
+// A case may bend the dice, which is the app's Easy handicap. Both
+// the rolls and the odds read off them have to answer to it, or the
+// harness would be proving parity of a game nobody plays.
+let luck = testCase.luck ?? 0
+var rng = LuckyRandom(base: Mulberry32(seed: testCase.seed), luck: luck)
 var state = initialState(playerIds: testCase.playerIds)
 var trace: [State] = [state]
 for dto in testCase.actions {
@@ -123,7 +132,7 @@ for dto in testCase.actions {
 
 do {
     let out = try JSONEncoder().encode(
-        ParityTrace(states: trace, odds: trace.map(oddsFor))
+        ParityTrace(states: trace, odds: trace.map { oddsFor($0, luck: luck) })
     )
     FileHandle.standardOutput.write(out)
 } catch {

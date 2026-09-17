@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Reads one parity case as JSON from stdin, emits the trace to stdout.
-import { initialState, step } from '../src/engine.js';
+import { initialState, luckyRng, step } from '../src/engine.js';
 import { bustChance, expectedRollGain, keepOptions } from '../src/odds.js';
 
 function mulberry32(seed) {
@@ -28,11 +28,11 @@ function actionFromDto(dto) {
 const SCALE = 1e9;
 const fixed = (x) => Math.round(x * SCALE);
 
-function oddsFor(state) {
+function oddsFor(state, luck) {
   return {
-    bust: fixed(bustChance(state.pickedFaces.length, state.diceInHand)),
-    ev: fixed(expectedRollGain(state.pickedFaces, state.diceInHand)),
-    keeps: keepOptions(state).map((k) => ({
+    bust: fixed(bustChance(state.pickedFaces, state.diceInHand, luck)),
+    ev: fixed(expectedRollGain(state.pickedFaces, state.diceInHand, luck)),
+    keeps: keepOptions(state, luck).map((k) => ({
       face: k.face,
       count: k.count,
       gain: k.gain,
@@ -51,11 +51,17 @@ const raw = await new Promise((resolve) => {
   process.stdin.on('end', () => resolve(buf));
 });
 const testCase = JSON.parse(raw);
-const rng = mulberry32(testCase.seed);
+// A case may bend the dice, which is the app's Easy handicap. Both
+// the rolls and the odds read off them have to answer to it, or the
+// harness would be proving parity of a game nobody plays.
+const luck = testCase.luck ?? 0;
+const rng = luckyRng(mulberry32(testCase.seed), luck);
 let state = initialState(testCase.playerIds);
 const states = [state];
 for (const dto of testCase.actions) {
   state = step(state, actionFromDto(dto), rng);
   states.push(state);
 }
-process.stdout.write(JSON.stringify({ states, odds: states.map(oddsFor) }));
+process.stdout.write(
+  JSON.stringify({ states, odds: states.map((s) => oddsFor(s, luck)) }),
+);

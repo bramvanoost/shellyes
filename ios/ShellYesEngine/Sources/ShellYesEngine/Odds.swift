@@ -53,11 +53,28 @@ public struct KeepOption: Codable, Sendable, Equatable {
 /// Chance that a roll of `diceInHand` dice shows only faces already
 /// picked, which is exactly the engine's bust condition.
 ///
-/// Each die independently lands on one of the `pickedCount` dead faces
-/// with probability `pickedCount / 6`, so the roll is dead with
-/// probability `(pickedCount / 6) ^ diceInHand`. Exact, not sampled.
-public func bustChance(pickedCount: Int, diceInHand: Int) -> Double {
-    pow(Double(pickedCount) / 6.0, Double(diceInHand))
+/// Each die independently lands on a dead face with the total
+/// probability of those faces, so the roll is dead with that total
+/// raised to `diceInHand`. Exact, not sampled.
+///
+/// It takes the faces rather than a count because a bent die is not
+/// bent evenly: `luck` moves mass from the 1 onto the coin, so which
+/// faces are spent decides how dangerous the next roll is. Two dead
+/// faces are not two dead faces when one of them is the coin. At
+/// `luck` 0 every face is worth `1/6` again and this collapses to the
+/// old `(pickedCount / 6) ^ diceInHand`.
+public func bustChance(pickedFaces: [Face], diceInHand: Int, luck: Double = 0) -> Double {
+    let dead = Set(pickedFaces)
+    // The two certainties are returned exactly rather than summed to.
+    // Six sixths do not add to 1 in binary, and a bust that is certain
+    // has to read as 1, not as 0.9999999999999996.
+    if dead.isEmpty { return 0 }
+    if dead.count == Face.allCases.count { return 1 }
+    var deadChance = 0.0
+    for face in Face.allCases where dead.contains(face) {
+        deadChance += faceChance(face, luck: luck)
+    }
+    return pow(deadChance, Double(diceInHand))
 }
 
 /// Expected value a single roll of `diceInHand` dice adds, given the
@@ -71,10 +88,11 @@ public func bustChance(pickedCount: Int, diceInHand: Int) -> Double {
 ///
 /// A roll with no available face contributes zero, which is what folds
 /// the bust case into the same number.
-public func expectedRollGain(pickedFaces: [Face], diceInHand: Int) -> Double {
+public func expectedRollGain(pickedFaces: [Face], diceInHand: Int, luck: Double = 0) -> Double {
     guard diceInHand > 0 else { return 0 }
     let dead = Set(pickedFaces)
     var counts = [Int](repeating: 0, count: 6)
+    let chances = Face.allCases.map { faceChance($0, luck: luck) }
     var total = 0.0
 
     // Walk the compositions of `diceInHand` over six faces. At most
@@ -82,7 +100,8 @@ public func expectedRollGain(pickedFaces: [Face], diceInHand: Int) -> Double {
     func walk(_ faceIndex: Int, _ remaining: Int) {
         if faceIndex == 5 {
             counts[5] = remaining
-            total += multinomial(counts, dice: diceInHand) * bestGain(counts, dead: dead)
+            total += multinomial(counts, dice: diceInHand, chances: chances)
+                * bestGain(counts, dead: dead)
             return
         }
         for n in 0...remaining {
@@ -99,7 +118,7 @@ public func expectedRollGain(pickedFaces: [Face], diceInHand: Int) -> Double {
 /// the odds that follow it. Empty in any phase but `pick`, and empty
 /// when the roll is dead — which is the bust the engine is about to
 /// apply.
-public func keepOptions(_ state: State) -> [KeepOption] {
+public func keepOptions(_ state: State, luck: Double = 0) -> [KeepOption] {
     guard state.phase == .pick else { return [] }
     let dead = Set(state.pickedFaces)
     var options: [KeepOption] = []
@@ -115,8 +134,16 @@ public func keepOptions(_ state: State) -> [KeepOption] {
                 count: count,
                 gain: count * face.value,
                 diceLeft: diceLeft,
-                bustChance: bustChance(pickedCount: nextPicked.count, diceInHand: diceLeft),
-                expectedRollGain: expectedRollGain(pickedFaces: nextPicked, diceInHand: diceLeft),
+                bustChance: bustChance(
+                    pickedFaces: nextPicked,
+                    diceInHand: diceLeft,
+                    luck: luck
+                ),
+                expectedRollGain: expectedRollGain(
+                    pickedFaces: nextPicked,
+                    diceInHand: diceLeft,
+                    luck: luck
+                ),
                 securesPearl: face == .coin
             )
         )
@@ -124,12 +151,17 @@ public func keepOptions(_ state: State) -> [KeepOption] {
     return options
 }
 
-/// Probability mass of one exact count vector under six fair dice:
-/// `d! / (c0!...c5!) * (1/6)^d`.
-private func multinomial(_ counts: [Int], dice: Int) -> Double {
+/// Probability mass of one exact count vector:
+/// `d! / (c0!...c5!) * p0^c0 * ... * p5^c5`.
+///
+/// `chances` is one probability per face, which is `1/6` six times for
+/// a fair die and something lopsided for a bent one.
+private func multinomial(_ counts: [Int], dice: Int, chances: [Double]) -> Double {
     var coefficient = factorial(dice)
     for c in counts { coefficient /= factorial(c) }
-    return coefficient * pow(1.0 / 6.0, Double(dice))
+    var mass = coefficient
+    for i in 0..<counts.count { mass *= pow(chances[i], Double(counts[i])) }
+    return mass
 }
 
 /// Best immediate gain from one rolled count vector, or zero when

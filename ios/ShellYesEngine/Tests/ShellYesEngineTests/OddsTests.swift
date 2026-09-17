@@ -9,19 +9,19 @@ final class OddsTests: XCTestCase {
     // MARK: - bustChance
 
     func testBustChanceIsZeroWithNothingPicked() {
-        XCTAssertEqual(bustChance(pickedCount: 0, diceInHand: 8), 0)
+        XCTAssertEqual(bustChance(pickedFaces: [], diceInHand: 8), 0)
     }
 
     func testBustChanceIsOneInSixForOneDieOverOneDeadFace() {
-        XCTAssertEqual(bustChance(pickedCount: 1, diceInHand: 1), 1.0 / 6.0, accuracy: 1e-12)
+        XCTAssertEqual(bustChance(pickedFaces: [.one], diceInHand: 1), 1.0 / 6.0, accuracy: 1e-12)
     }
 
     func testBustChanceCompoundsAcrossDice() {
-        XCTAssertEqual(bustChance(pickedCount: 3, diceInHand: 2), 0.25, accuracy: 1e-12)
+        XCTAssertEqual(bustChance(pickedFaces: [.one, .two, .three], diceInHand: 2), 0.25, accuracy: 1e-12)
     }
 
     func testBustChanceIsCertainOnceEveryFaceIsSpent() {
-        XCTAssertEqual(bustChance(pickedCount: 6, diceInHand: 4), 1)
+        XCTAssertEqual(bustChance(pickedFaces: Face.allCases, diceInHand: 4), 1)
     }
 
     // MARK: - expectedRollGain
@@ -118,5 +118,109 @@ final class OddsTests: XCTestCase {
         s.rolled = [.four, .four, .four, .four, .four, .four]
 
         XCTAssertFalse(keepOptions(s).contains { $0.face == .coin })
+    }
+}
+
+/// The Easy handicap: a die bent toward the coin, and the odds that
+/// have to know about it. Mirror of the `luck` cases in
+/// `tests/odds.test.ts` — change one, change both.
+final class LuckyDiceTests: XCTestCase {
+
+    func test_faceChance_movesMassFromTheOneOntoTheCoin() {
+        XCTAssertEqual(faceChance(.coin, luck: 0.05), 1.0 / 6.0 + 0.05, accuracy: 1e-12)
+        XCTAssertEqual(faceChance(.one, luck: 0.05), 1.0 / 6.0 - 0.05, accuracy: 1e-12)
+        for face in [Face.two, .three, .four, .five] {
+            XCTAssertEqual(faceChance(face, luck: 0.05), 1.0 / 6.0, accuracy: 1e-12)
+        }
+    }
+
+    func test_faceChance_neverBendsPastTheCap() {
+        // Asking for more than the cap is clamped, not honoured: at
+        // 1/6 the 1 already never comes up.
+        XCTAssertEqual(faceChance(.one, luck: 5), 0, accuracy: 1e-12)
+        XCTAssertEqual(faceChance(.coin, luck: 5), 1.0 / 3.0, accuracy: 1e-12)
+    }
+
+    func test_faceChance_stillSumsToOne() {
+        let total = Face.allCases.reduce(0.0) { $0 + faceChance($1, luck: 0.05) }
+        XCTAssertEqual(total, 1, accuracy: 1e-12)
+    }
+
+    /// The point of taking faces rather than a count: spending the
+    /// coin is more dangerous on a bent die than spending the 1, and
+    /// on a fair one they are the same.
+    func test_bustChance_dependsOnWhichFaceWasSpent() {
+        let spentCoin = bustChance(pickedFaces: [.coin], diceInHand: 2, luck: 0.05)
+        let spentOne = bustChance(pickedFaces: [.one], diceInHand: 2, luck: 0.05)
+        XCTAssertGreaterThan(spentCoin, spentOne)
+
+        XCTAssertEqual(
+            bustChance(pickedFaces: [.coin], diceInHand: 2),
+            bustChance(pickedFaces: [.one], diceInHand: 2),
+            accuracy: 1e-12
+        )
+    }
+
+    func test_bustChance_atZeroLuckIsTheFairFormula() {
+        XCTAssertEqual(
+            bustChance(pickedFaces: [.one, .two, .three], diceInHand: 3),
+            pow(0.5, 3),
+            accuracy: 1e-12
+        )
+    }
+
+    /// A kinder die is worth more per roll, which is the whole point
+    /// of granting one.
+    func test_expectedRollGain_risesWithLuck() {
+        let fair = expectedRollGain(pickedFaces: [], diceInHand: 4)
+        let bent = expectedRollGain(pickedFaces: [], diceInHand: 4, luck: 0.05)
+        XCTAssertGreaterThan(bent, fair)
+    }
+
+    /// Bent or not, a roll with every face spent is worth nothing.
+    func test_expectedRollGain_isZeroWhenEveryFaceIsSpent() {
+        XCTAssertEqual(
+            expectedRollGain(pickedFaces: Face.allCases, diceInHand: 5, luck: 0.05),
+            0
+        )
+    }
+
+    /// The remap has to leave the other four faces alone and spend
+    /// exactly one draw per die, or a seed would stop replaying.
+    func test_luckyRandom_movesOnlyTheOneAndTheCoin() {
+        var fair = Mulberry32(seed: 99)
+        var lucky = LuckyRandom(base: Mulberry32(seed: 99), luck: 0.05)
+        var fairCounts = [Int](repeating: 0, count: 7)
+        var luckyCounts = [Int](repeating: 0, count: 7)
+        let rolls = 120_000
+        for _ in 0..<rolls {
+            fairCounts[Int(fair.next() * 6) + 1] += 1
+            luckyCounts[Int(lucky.next() * 6) + 1] += 1
+        }
+        for face in 2...5 {
+            XCTAssertEqual(
+                luckyCounts[face],
+                fairCounts[face],
+                "face \(face) should be untouched by luck"
+            )
+        }
+        XCTAssertEqual(
+            Double(luckyCounts[6]) / Double(rolls),
+            1.0 / 6.0 + 0.05,
+            accuracy: 0.005
+        )
+        XCTAssertEqual(
+            Double(luckyCounts[1]) / Double(rolls),
+            1.0 / 6.0 - 0.05,
+            accuracy: 0.005
+        )
+    }
+
+    func test_luckyRandom_atZeroIsTheFairStream() {
+        var fair = Mulberry32(seed: 7)
+        var lucky = LuckyRandom(base: Mulberry32(seed: 7), luck: 0)
+        for _ in 0..<500 {
+            XCTAssertEqual(lucky.next(), fair.next())
+        }
     }
 }

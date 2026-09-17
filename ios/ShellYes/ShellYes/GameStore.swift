@@ -50,9 +50,35 @@ enum Difficulty: String, Codable, CaseIterable {
     /// hoping. A pair that reads as "weaker" often is not.
     var seatDiscipline: [Double] {
         switch self {
-        case .easy:   return [-0.20, -0.20]
+        case .easy:   return [0.00, 0.00]
         case .normal: return [0.20, 0.00]
         case .hard:   return [0.20, 0.50]
+        }
+    }
+
+    /// How far the *player's* dice are bent, and nobody else's. The
+    /// coin comes up `1/6 + luck` of the time and the 1 comes up
+    /// `1/6 - luck`; see `luckyRng` in `src/engine.ts` for the shape.
+    ///
+    /// Easy used to buy its whole win rate by making the bots greedy,
+    /// at -0.20 a seat. That works — it measured 65.1% — but greedy
+    /// bots fail 56% of their turns, and a table where the opponents
+    /// bust on every other turn reads as broken rather than as easy.
+    /// Bram played it and said so. Easy is now 0.00 a seat, where they
+    /// fail 49%, and the difference comes back to the player as dice.
+    ///
+    /// Nothing above Easy gets any. Normal and Hard roll the same fair
+    /// dice they always did, so a score posted on those boards means
+    /// exactly what it used to.
+    ///
+    /// The odds the app quotes know about this: `bustChance`,
+    /// `expectedRollGain` and `keepOptions` in `Odds.swift` all take
+    /// the same number. A handicap the explanation screen could not
+    /// see would make every figure it prints a lie.
+    var luck: Double {
+        switch self {
+        case .easy:            return 0.05
+        case .normal, .hard:   return 0
         }
     }
 }
@@ -270,9 +296,28 @@ final class GameStore {
         return ShellYesEngine.Difficulty(discipline: seats[index])
     }
 
+    /// Steps the engine, bending the dice when it is the human's turn
+    /// on a difficulty that grants any. See `Difficulty.luck`.
+    ///
+    /// `LuckyRandom` wraps the game's one `Mulberry32` and the advanced
+    /// base is handed back afterwards, so all three seats keep drawing
+    /// from a single stream and a seed still replays the whole game.
+    /// A second generator for the human would fork the sequence and
+    /// make a saved seed meaningless.
+    private func stepped(_ state: State, _ action: Action) -> State {
+        let luck = settings.difficulty.luck
+        guard luck > 0, state.current == Self.humanSeat else {
+            return step(state: state, action: action, rng: &rng)
+        }
+        var lucky = LuckyRandom(base: rng, luck: luck)
+        let next = step(state: state, action: action, rng: &lucky)
+        rng = lucky.base
+        return next
+    }
+
     func apply(_ action: Action) {
         let old = state
-        state = step(state: state, action: action, rng: &rng)
+        state = stepped(state, action)
         noteTurnOutcome(from: old)
 
         // The first action of a game is what makes it a game. Arm here

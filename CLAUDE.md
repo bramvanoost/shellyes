@@ -31,6 +31,7 @@ A push-your-luck dice game. Collect coins, bank them as tiles, steal rivals' til
 
 - `npm test` green.
 - Regression: 200-game AI-vs-AI sim terminates cleanly AND higher discipline beats lower discipline over the sample (proves AI tiers aren't cosmetic).
+- `npm run sim:difficulty` also covers `Difficulty.luck`. Bending the player's dice moves the ladder as surely as moving a seat does, so tune the two together and read the number.
 - `npm run sim:difficulty` green if you touched `Difficulty.seatDiscipline`, the AI, or anything that moves scoring. Proves each tier is harder than the one below it at every player skill. The two-seat regression above structurally cannot catch this — see the Easy-was-harder note below.
 - No `Math.random`/`Date` references inside `engine.ts`, `ai.ts` or `odds.ts`.
 - `node parity/diff.mjs` green (needs `swift build --package-path ios/ShellYesEngine --product shellyes-parity` first).
@@ -50,6 +51,46 @@ Two consequences. Ambition is quantised — `round(4 - discipline * 3.5)` gives 
 Documented 0..1, clamped by neither engine. Below 0 only `bustCeiling = 0.75 - discipline * 0.6` keeps moving, rising until it passes 1.0 at about -0.417, where the AI stops bailing on risk entirely; the ambition term saturates at once because `min(ceiling, ...)` caps it. Both seats at 0.00 — the floor of the documented range — gave Easy only 58.6%, which played as a coin flip, so 1.4 moved Easy to -0.20 for 65.2%. Bust probability is `(pickedFaces / 6) ^ diceInHand`, a discrete set, so the lever is stepped: 0.00, -0.20 and -0.417 are the only distinct settings below zero, and anything in between changes nothing. `sim/difficulty.ts` now enforces an absolute floor for Easy as well as monotonicity — a ladder can be perfectly monotone and still open on a tier nobody would call easy.
 
 `pickFace` ignores discipline entirely, so every tier picks dice identically and the whole ladder rides on stop/roll. That is the strongest untapped lever if Easy ever needs to go further: making Easy take the least valuable face measures at ~90% and is far too weak, but it shows the range.
+
+### Easy bends the player's dice, and the odds know it
+
+Difficulty used to live entirely in `ai.ts`: same dice for everybody,
+only the AI's stop/roll rule moved. Easy bought its whole win rate by
+making the bots greedy (-0.20 a seat), and greedy bots fail **56% of
+their turns** — a table of opponents busting every other turn reads as
+broken rather than as easy. Bram played 1.6 and said so.
+
+So Easy now sits at 0.00 a seat, where bots fail 49%, and the
+difference is paid back to the player as dice: `luckyRng` in
+`engine.ts` moves `luck` of the probability mass off the 1 and onto the
+coin, for the human seat only. At Easy's 0.05 the coin comes up 21.7%
+of the time instead of 16.7%. Measured 62.6% player wins at middling
+skill, monotone at every skill.
+
+Three rules around it:
+
+- **`odds.ts` takes the same `luck`.** `bustChance`, `expectedRollGain`
+  and `keepOptions` all report what a bent die actually does. A
+  handicap the explanation screen cannot see would make every figure it
+  prints a lie, and that is the line this feature does not cross.
+- **`bustChance` takes faces, not a count.** A bent die is not bent
+  evenly, so *which* faces are spent decides the danger: spending the
+  coin costs more than spending the 1.
+- **Only Easy gets any.** Normal and Hard roll fair dice, so a score on
+  those boards means what it always did.
+
+One consequence to hold in mind: the Easy leaderboards now mix scores
+rolled on fair dice (1.6 and earlier) with scores rolled on bent ones.
+The weekly Easy board heals itself every Monday. The all-time Easy
+board never resets, so its old entries are held to a slightly harder
+game than new ones — a known, accepted unfairness, not an oversight.
+
+`luckyRng` lives next to `rollDie` because it is the one place that
+knows which slice of the injected `rng`'s range maps to which face. A
+wrapper written anywhere else would be guessing at that mapping. It
+spends exactly one draw per die, so a seed still replays a game step
+for step and `parity/cases.json` can hold both engines to the same bent
+sequence.
 
 ### Bust burns the highest center tile (Heckmeck flip)
 "Return your top tile" alone caused 153/200 sim games to stalemate, tiles cycling in and out of the center forever. The burn rule is what makes the supply monotonically deplete. Do not remove it unless you add another depletion mechanism, and update CLAUDE.md if you do.

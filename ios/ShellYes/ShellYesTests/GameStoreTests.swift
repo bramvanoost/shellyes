@@ -99,10 +99,28 @@ final class GameStoreTests: XCTestCase {
     }
 
     func test_difficulty_seatDisciplineTable() {
-        XCTAssertEqual(Difficulty.easy.seatDiscipline, [-0.20, -0.20])
+        XCTAssertEqual(Difficulty.easy.seatDiscipline, [0.00, 0.00])
         XCTAssertEqual(Difficulty.normal.seatDiscipline, [0.20, 0.00])
         XCTAssertEqual(Difficulty.hard.seatDiscipline, [0.20, 0.50])
         XCTAssertEqual(Difficulty.allCases, [.easy, .normal, .hard])
+    }
+
+    /// Only Easy bends the dice. A score posted on Normal or Hard has
+    /// to mean what it always did, because both boards carry results
+    /// from before the handicap existed.
+    func test_difficulty_onlyEasyBendsTheDice() {
+        XCTAssertEqual(Difficulty.easy.luck, 0.05)
+        XCTAssertEqual(Difficulty.normal.luck, 0)
+        XCTAssertEqual(Difficulty.hard.luck, 0)
+    }
+
+    /// The bend has to stay under the engine's cap, where the 1 would
+    /// stop coming up at all.
+    func test_difficulty_luckStaysUnderTheCap() {
+        for difficulty in Difficulty.allCases {
+            XCTAssertGreaterThanOrEqual(difficulty.luck, 0)
+            XCTAssertLessThan(difficulty.luck, maxLuck)
+        }
     }
 
     /// Every difficulty has to describe both AI seats. A short table

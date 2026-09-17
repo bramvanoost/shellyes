@@ -105,6 +105,54 @@ export function bankOptions(state: State): BankOption[] {
   return options;
 }
 
+/// Most a die may be bent. At `1/6` the weakest face would never come
+/// up at all, which is a different game rather than a kinder one.
+export const MAX_LUCK = 1 / 6;
+
+/// A die that lands on the coin a little more often than a fair one,
+/// and on the 1 a little less. `luck` is the probability mass moved:
+/// the coin comes up `1/6 + luck` of the time, the 1 comes up
+/// `1/6 - luck`, and the other four faces are untouched.
+///
+/// This is the app's Easy handicap, and it is the ONLY sanctioned way
+/// to bend a roll. It lives here, next to `rollDie`, because it is the
+/// one place that knows which slice of the injected `rng`'s range maps
+/// to which face — a wrapper written anywhere else would be guessing
+/// at that mapping and would break silently if `rollDie` changed.
+///
+/// Exactly one draw from `base` per die, same as a fair roll, so a seed
+/// still replays a game step for step and the parity harness can hold
+/// both engines to the same sequence.
+///
+/// The odds the app quotes are not left behind: `bustChance`,
+/// `expectedRollGain` and `keepOptions` in `odds.ts` all take the same
+/// `luck` and report what a bent die actually does. A handicap the
+/// explanation screen doesn't know about would make every number it
+/// prints a lie.
+export function luckyRng(base: Rng, luck: number): Rng {
+  const moved = Math.max(0, Math.min(luck, MAX_LUCK));
+  if (moved === 0) return base;
+  const sixth = 1 / 6;
+  const keptLow = sixth - moved;
+  return () => {
+    const u = base();
+    // The top slice of the 1's range is folded into the coin's.
+    if (u >= keptLow && u < sixth) {
+      return 5 / 6 + ((u - keptLow) / moved) * sixth;
+    }
+    return u;
+  };
+}
+
+/// Chance one die shows `face`, given how far it is bent. Fair dice
+/// (`luck` 0) give every face `1/6`.
+export function faceChance(face: Face, luck: number = 0): number {
+  const moved = Math.max(0, Math.min(luck, MAX_LUCK));
+  if (face === COIN) return 1 / 6 + moved;
+  if (face === 1) return 1 / 6 - moved;
+  return 1 / 6;
+}
+
 function rollDie(rng: Rng): Face {
   const n = Math.floor(rng() * 6) + 1;
   return Math.min(6, Math.max(1, n)) as Face;
