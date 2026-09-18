@@ -194,6 +194,10 @@ struct BoardSheet: View {
         return max(page * 0.38, page - 300)
     }
 
+    /// Non-nil on iPad, where this is a full-window cover rather than
+    /// a sheet. Only the top padding cares.
+    @Environment(\.phoneCanvas) private var canvas
+
     var body: some View {
         GeometryReader { geo in
         let scale = previewScale(in: geo.size)
@@ -204,6 +208,7 @@ struct BoardSheet: View {
             // looking like an object.
             Color.paper.opacity(0.45)
                 .ignoresSafeArea()
+                .canvasFullBleed()
 
             if let cardSubject = subject.card {
                 // Two pages, vertical. The board is page one, because
@@ -350,7 +355,12 @@ struct BoardSheet: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.top, 24)
+        // On a phone this page opens as a sheet, below a gap and a
+        // grabber, so 24 clears the close button on its own. On iPad it
+        // opens as a cover that starts at the top of the window, where
+        // 24 puts the board's top corner right under the glyph — so it
+        // borrows the card page's 70.
+        .padding(.top, canvas == nil ? 24 : 70)
         .padding(.bottom, 8)
     }
 

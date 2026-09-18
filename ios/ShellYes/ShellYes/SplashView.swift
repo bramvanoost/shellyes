@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SplashView: View {
     let store: GameStore
@@ -98,6 +99,18 @@ struct SplashView: View {
             "tier": subject.tier,
         ])
         boardSubject = subject
+    }
+
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+
+    /// One board, presented two ways. See the call site for why.
+    @ViewBuilder
+    private func boardView(_ subject: BoardSheetSubject) -> some View {
+        PhoneCanvas {
+            BoardSheet(subject: subject) {
+                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+            }
+        }
     }
 
     var body: some View {
@@ -367,25 +380,18 @@ struct SplashView: View {
                 ExplainerView(from: "home", gamesPlayed: stats.gamesPlayed)
             }
         }
-        .sheet(item: $boardSubject) { subject in
-            // On the canvas like every other screen, so the board and
-            // the card under it come out the size they were drawn
-            // rather than a narrow column marooned in a page of cream.
-            PhoneCanvas {
-                BoardSheet(subject: subject) {
-                    gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
-                }
-            }
-            // iPad's default form sheet is a small box floating low on
-            // the screen, and this one carries a board, a scope toggle
-            // AND a share card under it. `.page` gives it the height
-            // the content already assumes. A no-op on phones, where a
-            // sheet fills the width anyway.
-            .presentationSizing(.page)
-            // The canvas paints the beach across the whole sheet, so
-            // the system's cream page underneath would only show as a
-            // band down each side of it.
-            .presentationBackground(.clear)
+        // A sheet on iPad is a page floating on a dimmed splash, and
+        // this one is a whole screen's worth: a board, a scope toggle
+        // and a share card under it. `presentationSizing(.page)` buys
+        // height but never the width, so the beach kept ending up as a
+        // column with the splash showing either side. A cover takes the
+        // window, which is what the content wants. Phones keep the
+        // sheet, where a swipe down is how you close things.
+        .sheet(item: isPad ? .constant(nil) : $boardSubject) { subject in
+            boardView(subject)
+        }
+        .fullScreenCover(item: isPad ? $boardSubject : .constant(nil)) { subject in
+            boardView(subject)
         }
         .gameCenterEntry(gameCenter)
         .task {
