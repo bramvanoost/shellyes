@@ -18,6 +18,7 @@ struct AIEventBanner: View {
             // banner instead of darkening it.
             Color.treasureInk.opacity(0.42)
                 .ignoresSafeArea()
+                .canvasFullBleed()
 
             VStack(spacing: 14) {
                 // zIndex bumps title + subtitle above the chip's drawing

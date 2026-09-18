@@ -931,6 +931,7 @@ struct GameView: View {
                         endRadius: 540
                     )
                     .ignoresSafeArea()
+                    .canvasFullBleed()
 
                     // Subtle paper-flecked grain so the wash doesn't read as flat.
                     LinearGradient(
@@ -939,6 +940,7 @@ struct GameView: View {
                         endPoint: .bottom
                     )
                     .ignoresSafeArea()
+                    .canvasFullBleed()
                     .blendMode(.softLight)
 
                     VStack(spacing: 20) {

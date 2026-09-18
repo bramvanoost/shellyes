@@ -20,6 +20,7 @@ struct WhatsNewCard: View {
             Color.treasureInk
                 .opacity(entered ? 0.55 : 0)
                 .ignoresSafeArea()
+                .canvasFullBleed()
 
             VStack(spacing: 16) {
                 ShellGlyph(size: 34)

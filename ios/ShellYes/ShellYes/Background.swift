@@ -8,7 +8,7 @@ struct Background: View {
     /// this beach at window shape, underneath the whole screen, so a
     /// screen drawing its own would only put a phone-shaped scene
     /// inside an iPad-shaped one.
-    @Environment(\.isInsidePhoneCanvas) private var isInsidePhoneCanvas
+    @Environment(\.phoneCanvas) private var canvas
 
     /// How much of the bottom edge the beach occupies. The default is
     /// the phone screen's, where the scene has a whole display to sit
@@ -17,7 +17,7 @@ struct Background: View {
     var groundInset: CGFloat = 130
 
     var body: some View {
-        if isInsidePhoneCanvas {
+        if canvas != nil {
             Color.clear
         } else {
             scene

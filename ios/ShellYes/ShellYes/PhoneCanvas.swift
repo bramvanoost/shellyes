@@ -74,10 +74,17 @@ struct PhoneCanvas<Content: View>: View {
                     // its canvas would otherwise think it was inside
                     // another one and draw nothing at all.
                     Background()
-                        .environment(\.isInsidePhoneCanvas, false)
+                        .environment(\.phoneCanvas, nil)
 
                     content
-                        .environment(\.isInsidePhoneCanvas, true)
+                        .environment(
+                            \.phoneCanvas,
+                            PhoneCanvasMetrics(
+                                scale: scale,
+                                size: geo.size,
+                                yOffset: (insets.top - insets.bottom) / 2
+                            )
+                        )
                         .frame(width: design.width, height: design.height)
                         .scaleEffect(scale, anchor: .center)
                         // Centred in the safe rect rather than in the
@@ -94,16 +101,65 @@ struct PhoneCanvas<Content: View>: View {
     }
 }
 
-private struct IsInsidePhoneCanvasKey: EnvironmentKey {
-    static let defaultValue = false
+/// What a `PhoneCanvas` is doing to the screen inside it: how much it
+/// scaled the phone canvas by, the size of the window it scaled into,
+/// and how far off centre it pushed the canvas to clear the status bar.
+///
+/// Read by `Background`, which simply stands down (the canvas draws the
+/// beach at window shape itself), and by `canvasFullBleed`, which is how
+/// a full-screen scrim reaches the edges of the WINDOW rather than the
+/// edges of the canvas.
+struct PhoneCanvasMetrics: Equatable {
+    let scale: CGFloat
+    let size: CGSize
+    let yOffset: CGFloat
+}
+
+private struct PhoneCanvasKey: EnvironmentKey {
+    static let defaultValue: PhoneCanvasMetrics? = nil
 }
 
 extension EnvironmentValues {
-    /// True for everything drawn inside a `PhoneCanvas`. Only
-    /// `Background` reads it, to stand its own phone-shaped scene down
-    /// in favour of the window-shaped one the canvas draws.
-    var isInsidePhoneCanvas: Bool {
-        get { self[IsInsidePhoneCanvasKey.self] }
-        set { self[IsInsidePhoneCanvasKey.self] = newValue }
+    var phoneCanvas: PhoneCanvasMetrics? {
+        get { self[PhoneCanvasKey.self] }
+        set { self[PhoneCanvasKey.self] = newValue }
+    }
+}
+
+/// Grows a full-screen fill to cover the window it is being scaled
+/// into, without changing what it measures.
+///
+/// `ignoresSafeArea` alone only reaches the edges of the phone canvas,
+/// so on iPad a scrim or a bust wash came out as a phone-shaped column
+/// with the beach still bright either side of it. The overlay is what
+/// keeps this honest: the fill overflows its parent on purpose, while
+/// the parent still measures the canvas — a scrim that MEASURED window
+/// width would widen the stack it sits in and push the board off both
+/// edges of the screen.
+private struct CanvasFullBleed: ViewModifier {
+    @Environment(\.phoneCanvas) private var canvas
+
+    func body(content: Content) -> some View {
+        if let canvas, canvas.scale > 0.01 {
+            Color.clear
+                .overlay {
+                    content
+                        .frame(
+                            width: canvas.size.width / canvas.scale,
+                            height: canvas.size.height / canvas.scale
+                        )
+                        .offset(y: -canvas.yOffset / canvas.scale)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    /// For full-screen fills only — scrims, washes, flashes. Pairs with
+    /// `ignoresSafeArea`, which handles the phone.
+    func canvasFullBleed() -> some View {
+        modifier(CanvasFullBleed())
     }
 }

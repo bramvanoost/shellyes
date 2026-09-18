@@ -142,12 +142,20 @@ Three things decide whether this works, each of them paid for once:
   and traps. The UI sweep caught this; a build that looks right on the
   splash can still crash on the way into a sheet.
 
+A full-screen fill has the same problem the beach had, and its own fix:
+`ignoresSafeArea` reaches the edges of the CANVAS, so the banner scrim
+and the bust wash came out as a dimmed phone-shaped column with bright
+beach either side. `canvasFullBleed()` is what makes one cover the
+window. It draws through an overlay on purpose — a scrim that MEASURED
+window width would widen the stack it sits in and push the board off
+both edges of the screen, which is what the first attempt did.
+
 Anything presented at window level is OUTSIDE the canvas that presented
 it: the tally `fullScreenCover` and the non-scrolling sheets each wrap
 themselves in `PhoneCanvas`. Add a new `sheet` or cover and it needs the
 same wrapper unless its content scrolls. Presentations inherit the
 presenter's environment, which is why the canvas forces
-`isInsidePhoneCanvas` back to false for its own beach — without that, a
+`phoneCanvas` back to nil for its own beach — without that, a
 canvas inside a sheet believes it is inside another one and draws no
 beach at all.
 
