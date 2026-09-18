@@ -94,6 +94,39 @@ final class BoardSheetScrollTests: XCTestCase {
                       "swiping over the names did not scroll the list to its end")
     }
 
+    /// The same rule under a SLOW drag: a press, then a gentle pull,
+    /// which is what a finger actually does and what the flick above
+    /// cannot see. iPad found this one — the rows and the sheet's pager
+    /// are two vertical scrollers stacked on each other, and which one
+    /// takes a lazy drag is not the same question as which one takes a
+    /// flick.
+    func testASlowDragOverTheNamesStillScrollsThem() throws {
+        let app = launch(["-standings", "top", "-shareCard", "weekly", "-boardRows", "20"])
+
+        let boardHeading = text(app, "easy · this week")
+        let toBoard = text(app, "back to the board")
+        XCTAssertTrue(boardHeading.waitForExistence(timeout: 15),
+                      "the sheet never showed the board")
+        let deep = row(app, rank: 20)
+        XCTAssertFalse(deep.isHittable,
+                       "the last row was on screen before scrolling — the board is not long enough to prove anything")
+
+        let onTheNames = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.30))
+        let above = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12))
+        for pass in 1...6 {
+            onTheNames.press(forDuration: 0.4, thenDragTo: above,
+                             withVelocity: .slow, thenHoldForDuration: 0.1)
+            settle()
+            XCTAssertTrue(boardHeading.isHittable,
+                          "the sheet paged away instead of scrolling the list (drag \(pass))")
+            XCTAssertFalse(toBoard.isHittable,
+                           "the drag reached the card page instead of scrolling the rows (drag \(pass))")
+            if deep.isHittable { break }
+        }
+        XCTAssertTrue(deep.isHittable,
+                      "a slow drag over the names did not scroll the list to its end")
+    }
+
     /// The card is still reachable from a long board: the rows take the
     /// swipe, so the written affordance is the way down and it has to
     /// work.
