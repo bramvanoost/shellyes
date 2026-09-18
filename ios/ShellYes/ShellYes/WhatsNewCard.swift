@@ -60,6 +60,18 @@ struct WhatsNewCard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                // The sign-off, when a release has one. Same plain
+                // paragraph as the lead-in and for the same reason:
+                // it frames the list, it is not in it.
+                if let outro = note.outro {
+                    Text(outro)
+                        .font(.avenir(13, weight: .medium, italic: true))
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(Color.ink.opacity(0.72))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 Text("tap anywhere to carry on")
                     .font(.avenir(11, weight: .medium, italic: true))
                     .tracking(1)

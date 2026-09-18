@@ -25,6 +25,12 @@ final class WhatsNew {
         /// saying "Also:" is a heading wearing the wrong clothes.
         var intro: String? = nil
         let lines: [String]
+        /// Optional sign-off, set below the list as a plain paragraph.
+        /// 1.7 is the first release whose news ends on a line that is
+        /// not an item — "another sunny day at the beach" is the wave
+        /// goodbye, and a shell in front of it would file it as a
+        /// fourth thing that changed.
+        var outro: String? = nil
     }
 
     /// Keyed by `CFBundleShortVersionString`. A version absent from
@@ -114,6 +120,25 @@ final class WhatsNew {
                 "Auto-continue now includes your own card, yay!",
                 "Fixed an interesting bug that conjured extra dice, leviosa!",
             ]
+        ),
+        Note(
+            version: "1.7",
+            title: "new this wave",
+            // Bram's words, as written. Two bullets, not three: he
+            // dropped the tied-first line from his rewrite, and it is
+            // dropped from the store copy too rather than quietly
+            // kept there.
+            intro: """
+                By popular demand: Shell Yes for iPad!
+                Whole beach on the whole screen.
+
+                Also:
+                """,
+            lines: [
+                "Easy mode is kinder to the rolls, less kind to the bots",
+                "Tap any rank to open the whole board, and scroll it",
+            ],
+            outro: "Another sunny day at the beach!"
         ),
     ]
 
