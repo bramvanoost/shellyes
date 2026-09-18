@@ -368,9 +368,24 @@ struct SplashView: View {
             }
         }
         .sheet(item: $boardSubject) { subject in
-            BoardSheet(subject: subject) {
-                gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+            // On the canvas like every other screen, so the board and
+            // the card under it come out the size they were drawn
+            // rather than a narrow column marooned in a page of cream.
+            PhoneCanvas {
+                BoardSheet(subject: subject) {
+                    gameCenter.open(.leaderboards, from: .home, hasPlayed: hasPlayed)
+                }
             }
+            // iPad's default form sheet is a small box floating low on
+            // the screen, and this one carries a board, a scope toggle
+            // AND a share card under it. `.page` gives it the height
+            // the content already assumes. A no-op on phones, where a
+            // sheet fills the width anyway.
+            .presentationSizing(.page)
+            // The canvas paints the beach across the whole sheet, so
+            // the system's cream page underneath would only show as a
+            // band down each side of it.
+            .presentationBackground(.clear)
         }
         .gameCenterEntry(gameCenter)
         .task {
