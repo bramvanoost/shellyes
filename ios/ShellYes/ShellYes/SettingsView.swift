@@ -266,10 +266,12 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(isPresented: $showAbout) {
-            AboutSheet()
+            PhoneCanvas { AboutSheet() }
         }
         .sheet(isPresented: $showExplainer) {
-            ExplainerView(from: "settings", gamesPlayed: stats.gamesPlayed)
+            PhoneCanvas {
+                ExplainerView(from: "settings", gamesPlayed: stats.gamesPlayed)
+            }
         }
         .gameCenterEntry(gameCenter)
         .alert("Start a new game?", isPresented: $showRestartConfirm) {

@@ -56,147 +56,151 @@ struct ShellYesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack(path: $path) {
-                SplashView(
-                    store: store,
-                    settings: settings,
-                    stats: stats,
-                    standings: standings
-                )
-                    .navigationDestination(for: Route.self) { route in
-                        switch route {
-                        case .game:
-                            GameView(store: store, settings: settings, stats: stats)
-                                .onAppear {
-                                    AudioPolicy.shared.setInGame(true)
-                                }
-                                .onDisappear {
-                                    AudioPolicy.shared.setInGame(false)
-                                }
-                        case .settings:
-                            SettingsView(
-                                settings: settings,
-                                stats: stats,
-                                onNewGame: {
-                                    store.newGame()
-                                    // Settings sits on top of the game
-                                    // screen, so dismissing lands back on
-                                    // a GameView that never re-runs its
-                                    // task. Without this the restart is
-                                    // the one start that goes unrecorded.
-                                    Telemetry.shared.track("game_started", props: [
-                                        "from": "settings",
-                                        "difficulty": settings.difficulty.rawValue,
-                                        "pace": settings.gameSpeed.rawValue,
-                                        "quiet_ai": settings.quietAITurns,
-                                        "games_played": stats.gamesPlayed,
-                                    ])
-                                }
-                            )
-                        case .stats:
-                            StatsView(stats: stats)
+            // iPad gets the phone layout scaled to its window rather
+            // than a stretched one. See `PhoneCanvas`.
+            PhoneCanvas {
+                NavigationStack(path: $path) {
+                    SplashView(
+                        store: store,
+                        settings: settings,
+                        stats: stats,
+                        standings: standings
+                    )
+                        .navigationDestination(for: Route.self) { route in
+                            switch route {
+                            case .game:
+                                GameView(store: store, settings: settings, stats: stats)
+                                    .onAppear {
+                                        AudioPolicy.shared.setInGame(true)
+                                    }
+                                    .onDisappear {
+                                        AudioPolicy.shared.setInGame(false)
+                                    }
+                            case .settings:
+                                SettingsView(
+                                    settings: settings,
+                                    stats: stats,
+                                    onNewGame: {
+                                        store.newGame()
+                                        // Settings sits on top of the game
+                                        // screen, so dismissing lands back on
+                                        // a GameView that never re-runs its
+                                        // task. Without this the restart is
+                                        // the one start that goes unrecorded.
+                                        Telemetry.shared.track("game_started", props: [
+                                            "from": "settings",
+                                            "difficulty": settings.difficulty.rawValue,
+                                            "pace": settings.gameSpeed.rawValue,
+                                            "quiet_ai": settings.quietAITurns,
+                                            "games_played": stats.gamesPlayed,
+                                        ])
+                                    }
+                                )
+                            case .stats:
+                                StatsView(stats: stats)
+                            }
                         }
-                    }
-            }
-            // Home action: reset any in-progress game and pop the
-            // entire nav stack back to the splash. Injected via the
-            // environment so any deeper view (Settings, etc.) can
-            // request "go home" without threading a closure through
-            // every intermediate view.
-            .environment(\.goHome, GoHomeAction {
-                store.newGame()
-                path = NavigationPath()
-            })
-            // Drain the stack before pushing, so tapping New Game from
-            // a sheet deep in Settings lands on one game screen rather
-            // than one stacked on top of the settings it came from.
-            .environment(\.startGame, StartGameAction {
-                path = NavigationPath()
-                path.append(Route.game)
-            })
-            #if DEBUG
-            .task {
-                if AchievementArtExporter.isRequestedByLaunchArgument {
-                    AchievementArtExporter.exportAll()
                 }
-            }
-            #endif
-            .preferredColorScheme(settings.colorMode.preferredScheme)
-            // Lifecycle telemetry — fires regardless of whether the
-            // user does anything in-game, so app_opened captures even
-            // splash-bounces. Pairs with app_closed (with foreground
-            // duration) on backgrounding.
-            //
-            // `scenePhase` can bounce `.active → .inactive → .active`
-            // in a quick flurry during simulator lock or some real
-            // device transitions, which would spam duplicate
-            // app_opened events and clobber `sessionStart` (making
-            // the next app_closed's duration_seconds drop to 0). We
-            // debounce: ignore any `.active` that fires within 2s of
-            // the previous one.
-            // The catch-up cannot wait for `.active` alone. GameKit
-            // answers its authenticate handler asynchronously, and on a
-            // cold launch it is still unanswered when the scene turns
-            // active — so the call below no-ops on the guard and the
-            // backfill does not happen until the player backgrounds the
-            // app and comes back. Nothing is lost when that happens
-            // (`didBackfill` is only written after a real run), but a
-            // player who updates, opens the app and looks straight at
-            // Achievements sees an empty screen they had earned.
-            //
-            // Watching the flag covers the other order too: when auth
-            // lands first, `.active` still fires and finds the guard
-            // already satisfied. Both paths are idempotent.
-            .onChange(of: GameCenter.shared.isAuthenticated) { _, signedIn in
-                guard signedIn else { return }
-                GameCenter.shared.backfillIfNeeded(from: stats)
-                // Ranks need the same hook, for the same reason. The
-                // splash asks for them from its `.task`, which on a
-                // cold launch runs while GameKit is still deciding who
-                // the player is — so `loadStandings` returns nothing on
-                // its `isAuthenticated` guard, and `.task` never fires
-                // again to ask a second time. A signed-in player was
-                // left looking at a splash with no rank on it until
-                // they backgrounded the app and came back.
-                //
-                // Ordered after the backfill deliberately: that call
-                // is what puts a lapsed player's history onto the
-                // boards, and this one is what reads a rank back off
-                // them.
-                Task { await standings.refresh() }
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                switch newPhase {
-                case .active:
-                    // Audio recovery runs BEFORE the telemetry debounce
-                    // below. Interruptions (calls, Siri) and the screen
-                    // locking mid-game leave the session deactivated and
-                    // our players paused, and a lock/unlock is exactly
-                    // the kind of transition that trips the 2s bounce
-                    // guard — so restoring sound behind that `return`
-                    // meant sound never came back.
-                    AudioPolicy.shared.configureSession()
-                    AudioPolicy.shared.refresh()
-                    let now = Date()
-                    if let start = sessionStart, now.timeIntervalSince(start) < 2 {
-                        // Bounced active — same session, drop the
-                        // duplicate event, keep the original start.
-                        return
+                // Home action: reset any in-progress game and pop the
+                // entire nav stack back to the splash. Injected via the
+                // environment so any deeper view (Settings, etc.) can
+                // request "go home" without threading a closure through
+                // every intermediate view.
+                .environment(\.goHome, GoHomeAction {
+                    store.newGame()
+                    path = NavigationPath()
+                })
+                // Drain the stack before pushing, so tapping New Game from
+                // a sheet deep in Settings lands on one game screen rather
+                // than one stacked on top of the settings it came from.
+                .environment(\.startGame, StartGameAction {
+                    path = NavigationPath()
+                    path.append(Route.game)
+                })
+                #if DEBUG
+                .task {
+                    if AchievementArtExporter.isRequestedByLaunchArgument {
+                        AchievementArtExporter.exportAll()
                     }
-                    sessionStart = now
-                    Telemetry.shared.track("app_opened")
-                    // One-time catch-up for players who had a history
-                    // before Game Center existed. No-ops if unsigned or
-                    // already done.
+                }
+                #endif
+                .preferredColorScheme(settings.colorMode.preferredScheme)
+                // Lifecycle telemetry — fires regardless of whether the
+                // user does anything in-game, so app_opened captures even
+                // splash-bounces. Pairs with app_closed (with foreground
+                // duration) on backgrounding.
+                //
+                // `scenePhase` can bounce `.active → .inactive → .active`
+                // in a quick flurry during simulator lock or some real
+                // device transitions, which would spam duplicate
+                // app_opened events and clobber `sessionStart` (making
+                // the next app_closed's duration_seconds drop to 0). We
+                // debounce: ignore any `.active` that fires within 2s of
+                // the previous one.
+                // The catch-up cannot wait for `.active` alone. GameKit
+                // answers its authenticate handler asynchronously, and on a
+                // cold launch it is still unanswered when the scene turns
+                // active — so the call below no-ops on the guard and the
+                // backfill does not happen until the player backgrounds the
+                // app and comes back. Nothing is lost when that happens
+                // (`didBackfill` is only written after a real run), but a
+                // player who updates, opens the app and looks straight at
+                // Achievements sees an empty screen they had earned.
+                //
+                // Watching the flag covers the other order too: when auth
+                // lands first, `.active` still fires and finds the guard
+                // already satisfied. Both paths are idempotent.
+                .onChange(of: GameCenter.shared.isAuthenticated) { _, signedIn in
+                    guard signedIn else { return }
                     GameCenter.shared.backfillIfNeeded(from: stats)
-                case .background:
-                    let seconds = sessionStart.map { Int(Date().timeIntervalSince($0)) } ?? 0
-                    Telemetry.shared.track("app_closed", props: [
-                        "duration_seconds": seconds,
-                    ])
-                    sessionStart = nil
-                default:
-                    break
+                    // Ranks need the same hook, for the same reason. The
+                    // splash asks for them from its `.task`, which on a
+                    // cold launch runs while GameKit is still deciding who
+                    // the player is — so `loadStandings` returns nothing on
+                    // its `isAuthenticated` guard, and `.task` never fires
+                    // again to ask a second time. A signed-in player was
+                    // left looking at a splash with no rank on it until
+                    // they backgrounded the app and came back.
+                    //
+                    // Ordered after the backfill deliberately: that call
+                    // is what puts a lapsed player's history onto the
+                    // boards, and this one is what reads a rank back off
+                    // them.
+                    Task { await standings.refresh() }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    switch newPhase {
+                    case .active:
+                        // Audio recovery runs BEFORE the telemetry debounce
+                        // below. Interruptions (calls, Siri) and the screen
+                        // locking mid-game leave the session deactivated and
+                        // our players paused, and a lock/unlock is exactly
+                        // the kind of transition that trips the 2s bounce
+                        // guard — so restoring sound behind that `return`
+                        // meant sound never came back.
+                        AudioPolicy.shared.configureSession()
+                        AudioPolicy.shared.refresh()
+                        let now = Date()
+                        if let start = sessionStart, now.timeIntervalSince(start) < 2 {
+                            // Bounced active — same session, drop the
+                            // duplicate event, keep the original start.
+                            return
+                        }
+                        sessionStart = now
+                        Telemetry.shared.track("app_opened")
+                        // One-time catch-up for players who had a history
+                        // before Game Center existed. No-ops if unsigned or
+                        // already done.
+                        GameCenter.shared.backfillIfNeeded(from: stats)
+                    case .background:
+                        let seconds = sessionStart.map { Int(Date().timeIntervalSince($0)) } ?? 0
+                        Telemetry.shared.track("app_closed", props: [
+                            "duration_seconds": seconds,
+                        ])
+                        sessionStart = nil
+                    default:
+                        break
+                    }
                 }
             }
         }

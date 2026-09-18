@@ -1041,6 +1041,11 @@ struct GameView: View {
                     && !bustFlash && bustAnimatedRoll == nil
             )
         ) {
+            // The cover is presented at window level, outside the
+            // canvas the game screen sits in, so it needs its own —
+            // otherwise the tally meets a raw iPad window and clips
+            // the same way the board did.
+            PhoneCanvas {
             CountingCeremony(
                 players: store.state.players,
                 scores: store.scores,
@@ -1079,6 +1084,7 @@ struct GameView: View {
                     settings.difficulty = .normal
                 }
             )
+            }
         }
         .navigationBarHidden(true)
         #if DEBUG

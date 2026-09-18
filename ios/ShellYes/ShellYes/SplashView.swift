@@ -360,7 +360,12 @@ struct SplashView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showExplainer) {
-            ExplainerView(from: "home", gamesPlayed: stats.gamesPlayed)
+            // A sheet is presented outside the canvas the splash sits
+            // in, and how-to-play doesn't scroll — on an iPad form
+            // sheet it would simply lose its last rules.
+            PhoneCanvas {
+                ExplainerView(from: "home", gamesPlayed: stats.gamesPlayed)
+            }
         }
         .sheet(item: $boardSubject) { subject in
             BoardSheet(subject: subject) {

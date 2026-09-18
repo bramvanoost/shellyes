@@ -104,6 +104,44 @@ sequence.
 ### Banking with both steal and center available is a player choice
 When the active player's sum could either steal a rival's top tile OR take a tile from the supply, the engine parks in a new `chooseBank` phase and waits for a `BANK` action. This is the Heckmeck rule (stealing is always optional) and replaces the older "steal takes priority over center" behavior, which silently denied players game-ending plays (e.g. banking sum 26 with [25] on the beach and a rival holding 26: the old engine forced the steal and the game dragged on; the new engine lets the player end it). When only one option exists, the engine still auto-commits to keep the rhythm of the common case. AI policy: prefer a game-ending center pick (`centerTiles.count == 1`), otherwise prefer steal to keep the sim baseline close to the pre-change numbers.
 
+### iPad runs the phone layout, scaled
+
+`TARGETED_DEVICE_FAMILY` is `1,2`, but not one call site in the app is
+size-class aware: about eighty of them hardcode a width, a height or a
+padding against a 393x852 phone canvas, and the game screen's root
+`VStack` has a floor it cannot compress below. Give it less height than
+it wants and it overflows its `ZStack`, which centres itself in the
+window and clips the chrome bar off the top and ROLL off the bottom.
+That is exactly what iPad showed in compatibility mode before 1.7.
+
+`PhoneCanvas` is the whole iPad story: lay the screen out at 393x852,
+aspect-fit it into whatever window it is given, centre it over a
+full-bleed `Background`. Phones take the other branch and are byte for
+byte what they were, so the 6.5-inch captures still match.
+
+Three things to know when touching it.
+
+The canvas consumes the safe area itself, and the letterbox behind it
+is the same `Background` drawn into a window-sized box measured in
+design points and scaled by the same factor. Both matter to the seam:
+leave the insets to the screens inside and every `Background` expands
+past the canvas it was framed to, so the sky inside comes out a
+different colour from the sky beside it; draw the letterbox at window
+scale instead and its palms come out a third the size of the ones
+inside. What is left is a one-pixel hairline at the canvas edge, which
+`compositingGroup` does not remove and which was judged not worth more.
+
+Standing the inner beaches down and showing one through is the obvious
+third idea and it does not work: a `NavigationStack` paints an opaque
+background of its own, so the canvas comes out as a white column.
+
+And anything presented at window level is OUTSIDE the canvas: the tally
+`fullScreenCover` and the non-scrolling sheets each wrap themselves in
+`PhoneCanvas` for that reason. Add a new `sheet` or cover and it needs
+the same wrapper unless its content scrolls. Note that presentations
+inherit the presenter's environment, so an "am I inside a canvas" flag
+cannot be used to decide it for them.
+
 ### CLI must fit the terminal frame
 Renderer uses the alternate screen buffer (`\x1b[?1049h`/`l`) and writes a fixed 22-row frame: header(4) + center(6) + vaults(5) + turn(6) + footer(1). NEVER append after `render()` returns. Status/prompt/AI-thinking lines must go through `opts.footer` so they're part of the same cleared frame. The flash banner overwrites the footer row via `\r`, not new lines. Past 22 rows the screen scrolls and you see stale frames stacking.
 

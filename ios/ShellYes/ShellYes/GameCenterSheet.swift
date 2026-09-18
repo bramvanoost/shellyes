@@ -144,8 +144,10 @@ extension View {
                     .ignoresSafeArea()
             }
             .sheet(item: Binding(get: { entry.emptyPane }, set: { entry.emptyPane = $0 })) { pane in
-                GameCenterEmptyView(pane: pane, from: entry.lastSource) {
-                    entry.emptyPane = nil
+                PhoneCanvas {
+                    GameCenterEmptyView(pane: pane, from: entry.lastSource) {
+                        entry.emptyPane = nil
+                    }
                 }
             }
             .alert(
