@@ -112,35 +112,44 @@ padding against a 393x852 phone canvas, and the game screen's root
 `VStack` has a floor it cannot compress below. Give it less height than
 it wants and it overflows its `ZStack`, which centres itself in the
 window and clips the chrome bar off the top and ROLL off the bottom.
-That is exactly what iPad showed in compatibility mode before 1.7.
+That is exactly what iPad showed in compatibility mode before this.
 
 `PhoneCanvas` is the whole iPad story: lay the screen out at 393x852,
-aspect-fit it into whatever window it is given, centre it over a
-full-bleed `Background`. Phones take the other branch and are byte for
-byte what they were, so the 6.5-inch captures still match.
+aspect-fit it into whatever window it is given, and draw the beach once
+at window shape underneath. Screens inside stand their own `Background`
+down, so the scene is iPad-shaped rather than a phone-shaped one
+floating inside an iPad-shaped one. Phones take the other branch of
+`PhoneCanvas` and are byte for byte what they were, so the 6.5-inch
+captures still match.
 
-Three things to know when touching it.
+Three things decide whether this works, each of them paid for once:
 
-The canvas consumes the safe area itself, and the letterbox behind it
-is the same `Background` drawn into a window-sized box measured in
-design points and scaled by the same factor. Both matter to the seam:
-leave the insets to the screens inside and every `Background` expands
-past the canvas it was framed to, so the sky inside comes out a
-different colour from the sky beside it; draw the letterbox at window
-scale instead and its palms come out a third the size of the ones
-inside. What is left is a one-pixel hairline at the canvas edge, which
-`compositingGroup` does not remove and which was judged not worth more.
+- **The canvas goes INSIDE the `NavigationStack`, one per screen.** A
+  `NavigationStack` paints an opaque background of its own, and it sits
+  ABOVE anything drawn behind the stack — wrap the stack in a canvas and
+  the beach ends up behind that white, which reads as a phone-shaped
+  white column parked in the middle of the iPad. Neither
+  `containerBackground(.clear, for: .navigation)` nor clearing
+  `UIView.appearance(whenContainedInInstancesOf:)` touches it. Putting
+  the canvas inside means the white is behind the canvas's own beach,
+  which is where it has always been on a phone.
+- **The canvas consumes the safe area itself** (`ignoresSafeArea` on the
+  GeometryReader, insets subtracted by hand). Leave it to the screens
+  and every `Background` expands past the canvas it was framed to.
+- **Scale is floored above zero.** SwiftUI proposes a zero size on the
+  first pass of some presentations, and dividing the window size by a
+  zero scale reaches `BeachScene`'s GeometryReader as a non-finite frame
+  and traps. The UI sweep caught this; a build that looks right on the
+  splash can still crash on the way into a sheet.
 
-Standing the inner beaches down and showing one through is the obvious
-third idea and it does not work: a `NavigationStack` paints an opaque
-background of its own, so the canvas comes out as a white column.
-
-And anything presented at window level is OUTSIDE the canvas: the tally
-`fullScreenCover` and the non-scrolling sheets each wrap themselves in
-`PhoneCanvas` for that reason. Add a new `sheet` or cover and it needs
-the same wrapper unless its content scrolls. Note that presentations
-inherit the presenter's environment, so an "am I inside a canvas" flag
-cannot be used to decide it for them.
+Anything presented at window level is OUTSIDE the canvas that presented
+it: the tally `fullScreenCover` and the non-scrolling sheets each wrap
+themselves in `PhoneCanvas`. Add a new `sheet` or cover and it needs the
+same wrapper unless its content scrolls. Presentations inherit the
+presenter's environment, which is why the canvas forces
+`isInsidePhoneCanvas` back to false for its own beach — without that, a
+canvas inside a sheet believes it is inside another one and draws no
+beach at all.
 
 ### CLI must fit the terminal frame
 Renderer uses the alternate screen buffer (`\x1b[?1049h`/`l`) and writes a fixed 22-row frame: header(4) + center(6) + vaults(5) + turn(6) + footer(1). NEVER append after `render()` returns. Status/prompt/AI-thinking lines must go through `opts.footer` so they're part of the same cleared frame. The flash banner overwrites the footer row via `\r`, not new lines. Past 22 rows the screen scrolls and you see stale frames stacking.

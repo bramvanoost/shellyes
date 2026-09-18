@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct ShellYesApp: App {
@@ -56,20 +57,27 @@ struct ShellYesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // iPad gets the phone layout scaled to its window rather
-            // than a stretched one. See `PhoneCanvas`.
-            PhoneCanvas {
-                NavigationStack(path: $path) {
-                    SplashView(
-                        store: store,
-                        settings: settings,
-                        stats: stats,
-                        standings: standings
-                    )
+            // Each screen sits on its own `PhoneCanvas`: the phone
+            // layout, scaled to the window on iPad. The canvas is
+            // INSIDE the stack rather than around it, so the opaque
+            // background a NavigationStack paints for itself ends up
+            // behind the canvas's beach instead of in front of it,
+            // where it showed as a phone-shaped white column.
+            NavigationStack(path: $path) {
+                    PhoneCanvas {
+                        SplashView(
+                            store: store,
+                            settings: settings,
+                            stats: stats,
+                            standings: standings
+                        )
+                    }
                         .navigationDestination(for: Route.self) { route in
                             switch route {
                             case .game:
-                                GameView(store: store, settings: settings, stats: stats)
+                                PhoneCanvas {
+                                    GameView(store: store, settings: settings, stats: stats)
+                                }
                                     .onAppear {
                                         AudioPolicy.shared.setInGame(true)
                                     }
@@ -77,6 +85,7 @@ struct ShellYesApp: App {
                                         AudioPolicy.shared.setInGame(false)
                                     }
                             case .settings:
+                                PhoneCanvas {
                                 SettingsView(
                                     settings: settings,
                                     stats: stats,
@@ -96,12 +105,13 @@ struct ShellYesApp: App {
                                         ])
                                     }
                                 )
+                                }
                             case .stats:
-                                StatsView(stats: stats)
+                                PhoneCanvas { StatsView(stats: stats) }
                             }
                         }
                 }
-                // Home action: reset any in-progress game and pop the
+            // Home action: reset any in-progress game and pop the
                 // entire nav stack back to the splash. Injected via the
                 // environment so any deeper view (Settings, etc.) can
                 // request "go home" without threading a closure through
@@ -202,7 +212,6 @@ struct ShellYesApp: App {
                         break
                     }
                 }
-            }
         }
     }
 }

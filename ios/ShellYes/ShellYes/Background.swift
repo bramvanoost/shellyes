@@ -4,6 +4,12 @@ import SwiftUI
 /// dune, and a couple of palm silhouettes. Used by every screen so all the
 /// foreground chrome floats on the same atmosphere.
 struct Background: View {
+    /// Set by `PhoneCanvas`. Inside one the canvas has already drawn
+    /// this beach at window shape, underneath the whole screen, so a
+    /// screen drawing its own would only put a phone-shaped scene
+    /// inside an iPad-shaped one.
+    @Environment(\.isInsidePhoneCanvas) private var isInsidePhoneCanvas
+
     /// How much of the bottom edge the beach occupies. The default is
     /// the phone screen's, where the scene has a whole display to sit
     /// in; a small fixed canvas like the share card needs the horizon
@@ -11,6 +17,14 @@ struct Background: View {
     var groundInset: CGFloat = 130
 
     var body: some View {
+        if isInsidePhoneCanvas {
+            Color.clear
+        } else {
+            scene
+        }
+    }
+
+    private var scene: some View {
         ZStack {
             // Sky gradient
             LinearGradient(

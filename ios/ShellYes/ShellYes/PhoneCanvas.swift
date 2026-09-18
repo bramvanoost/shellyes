@@ -45,32 +45,40 @@ struct PhoneCanvas<Content: View>: View {
                 )
                 // Fit, never fill: filling would crop a layout that has
                 // no margin to spare on either axis.
-                let scale = min(
-                    safe.width / design.width,
-                    safe.height / design.height
+                //
+                // Floored above zero because SwiftUI proposes a zero
+                // size on the first pass of some presentations, and a
+                // scale of zero turns the window-size division below
+                // into infinity — which reaches `BeachScene`'s
+                // GeometryReader as a non-finite frame and traps.
+                let scale = max(
+                    0.0001,
+                    min(
+                        safe.width / design.width,
+                        safe.height / design.height
+                    )
                 )
 
                 ZStack {
-                    // The letterbox beach is the same beach at the same
-                    // zoom: a window-sized canvas measured in design
-                    // points, scaled with everything else. Drawn at
-                    // window scale instead, its palms and its dune come
-                    // out a third the size of the ones inside the canvas
-                    // and the edge reads as a seam.
+                    // One beach, shaped to the window. The screens
+                    // inside stand their own down (see `Background`), so
+                    // there is no phone-shaped scene sitting inside an
+                    // iPad-shaped one.
+                    //
+                    // The flag is forced off here: a sheet or cover
+                    // inherits the presenter's environment, so its own
+                    // canvas would otherwise think it was inside
+                    // another one and draw no beach at all.
+                    // Forced off for the canvas's own beach: a sheet or
+                    // cover inherits the presenter's environment, so
+                    // its canvas would otherwise think it was inside
+                    // another one and draw nothing at all.
                     Background()
-                        .frame(
-                            width: geo.size.width / scale,
-                            height: geo.size.height / scale
-                        )
-                        .scaleEffect(scale, anchor: .center)
+                        .environment(\.isInsidePhoneCanvas, false)
 
                     content
+                        .environment(\.isInsidePhoneCanvas, true)
                         .frame(width: design.width, height: design.height)
-                        // Flattened before the scale. Without it the
-                        // canvas's outer edge antialiases against the
-                        // white a NavigationStack paints behind itself,
-                        // and a pale hairline runs down both sides.
-                        .compositingGroup()
                         .scaleEffect(scale, anchor: .center)
                         // Centred in the safe rect rather than in the
                         // window, so the chrome bar clears the status
@@ -83,5 +91,19 @@ struct PhoneCanvas<Content: View>: View {
         } else {
             content
         }
+    }
+}
+
+private struct IsInsidePhoneCanvasKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True for everything drawn inside a `PhoneCanvas`. Only
+    /// `Background` reads it, to stand its own phone-shaped scene down
+    /// in favour of the window-shaped one the canvas draws.
+    var isInsidePhoneCanvas: Bool {
+        get { self[IsInsidePhoneCanvasKey.self] }
+        set { self[IsInsidePhoneCanvasKey.self] = newValue }
     }
 }
