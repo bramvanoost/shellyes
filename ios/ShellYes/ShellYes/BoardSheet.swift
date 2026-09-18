@@ -256,6 +256,14 @@ struct BoardSheet: View {
                     .defaultScrollAnchor(.top)
                     .scrollTargetBehavior(.viewAligned)
                     .scrollIndicators(.hidden)
+                    // iPad only: the pager stops taking drags, so the
+                    // rows are the only thing under a finger — or a
+                    // trackpad, which hands its scroll to the outer
+                    // view whatever the rows would rather do — that can
+                    // move. The written affordances are the way between
+                    // the pages there, and they scroll programmatically,
+                    // which this does not block.
+                    .scrollDisabled(canvas != nil)
                     #if DEBUG
                     .task {
                         guard ScreenshotMode.startsOnShareCard else { return }
